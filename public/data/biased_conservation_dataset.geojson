@@ -1,0 +1,78 @@
+
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "Zone_Name": "Alpha Reserve",
+        "Region": "North",
+        "Observation_Count": 60
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-73.985130, 40.758896]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "Zone_Name": "Beta Sanctuary",
+        "Region": "South",
+        "Observation_Count": 35
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-74.005974, 40.712776]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "Zone_Name": "Gamma Wetlands",
+        "Region": "East",
+        "Observation_Count": 15
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-73.935242, 40.730610]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "Zone_Name": "Delta Forest",
+        "Region": "West",
+        "Observation_Count": 70
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-74.040000, 40.760000]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "Zone_Name": "Epsilon Grasslands",
+        "Region": "North",
+        "Observation_Count": 5
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-73.970000, 40.780000]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "Zone_Name": "Zeta Park",
+        "Region": "Central",
+        "Observation_Count": 25
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-73.965242, 40.740610]
+      }
+    }
+  ]
+}
