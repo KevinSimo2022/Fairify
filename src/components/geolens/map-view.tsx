@@ -1,10 +1,10 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react"; // Added useRef
 import type { Feature, FeatureCollection, Point } from "geojson";
 import { MapContainer, TileLayer, GeoJSON } from "react-leaflet";
-import type { LatLngExpression, Layer } from "leaflet";
+import type { LatLngExpression, Layer, Map as LeafletMap } from "leaflet"; // Added Map type
 import "leaflet/dist/leaflet.css";
 import L from 'leaflet'; 
 
@@ -40,6 +40,7 @@ const Legend = () => (
 export function MapView() {
   const [geoData, setGeoData] = useState<ConservationZoneFeatureCollection | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const mapInstanceRef = useRef<LeafletMap | null>(null); // Ref to store map instance
 
   useEffect(() => {
     const fetchData = async () => {
@@ -56,7 +57,15 @@ export function MapView() {
       }
     };
     fetchData();
-  }, []);
+
+    // Cleanup function for when the component unmounts
+    return () => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove(); // Leaflet's own cleanup method
+        mapInstanceRef.current = null;
+      }
+    };
+  }, []); // Empty dependency array: fetch data once on mount, cleanup on unmount
 
   const getColor = (observationCount: number) => {
     if (observationCount >= 50) return "green"; 
@@ -112,19 +121,20 @@ export function MapView() {
   return (
     <div className="relative aspect-[16/9] w-full bg-muted rounded-lg overflow-hidden shadow">
       <MapContainer
-        key={JSON.stringify(geoData)} // Add key to force remount when geoData changes
+        // Removed the key here as manual instance management is now primary for HMR
         center={center}
         zoom={7} 
         scrollWheelZoom={true}
         style={{ height: "100%", width: "100%" }}
         className="z-0" 
+        whenCreated={(map) => { mapInstanceRef.current = map; }} // Store map instance
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <GeoJSON
-          key={`geojson-layer-${JSON.stringify(geoData)}`} // Ensure GeoJSON layer also updates distinctly
+          key={`geojson-layer-${JSON.stringify(geoData)}`} // Key for GeoJSON layer data changes
           data={geoData}
           pointToLayer={pointToLayer}
           onEachFeature={onEachFeature}
