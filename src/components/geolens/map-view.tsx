@@ -3,19 +3,10 @@
 
 import { useEffect, useState } from "react";
 import type { Feature, FeatureCollection, Point } from "geojson";
-import { MapContainer, TileLayer, GeoJSON, Popup } from "react-leaflet";
-import type { LatLngExpression, GeoJSON as LeafletGeoJSON, Layer } from "leaflet";
+import { MapContainer, TileLayer, GeoJSON } from "react-leaflet"; // Removed Popup as it's used in onEachFeature
+import type { LatLngExpression, Layer } from "leaflet"; // Removed GeoJSON as LeafletGeoJSON as it's not directly used
 import "leaflet/dist/leaflet.css";
-import L from 'leaflet'; // Import L for CircleMarker
-
-// Ensure default icon paths are configured correctly if using L.Marker (not strictly needed for CircleMarker)
-// delete L.Icon.Default.prototype._getIconUrl;
-// L.Icon.Default.mergeOptions({
-//   iconRetinaUrl: '/leaflet/marker-icon-2x.png',
-//   iconUrl: '/leaflet/marker-icon.png',
-//   shadowUrl: '/leaflet/marker-shadow.png',
-// });
-
+import L from 'leaflet'; 
 
 interface ConservationZoneProperties {
   Zone_Name: string;
@@ -49,15 +40,9 @@ const Legend = () => (
 export function MapView() {
   const [geoData, setGeoData] = useState<ConservationZoneFeatureCollection | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [mapReady, setMapReady] = useState(false);
+  // const [mapReady, setMapReady] = useState(false); // Removed mapReady state
 
   useEffect(() => {
-    // Dynamically import leaflet only on client side to avoid SSR issues with window object
-    // This also helps with ensuring CSS is loaded correctly.
-    import('leaflet/dist/leaflet.css').then(() => {
-       setMapReady(true);
-    });
-
     const fetchData = async () => {
       try {
         const response = await fetch("/data/biased_conservation_dataset.geojson");
@@ -75,9 +60,9 @@ export function MapView() {
   }, []);
 
   const getColor = (observationCount: number) => {
-    if (observationCount >= 50) return "green"; // High
-    if (observationCount >= 20) return "yellow"; // Medium
-    return "red"; // Low
+    if (observationCount >= 50) return "green"; 
+    if (observationCount >= 20) return "yellow"; 
+    return "red"; 
   };
 
   const pointToLayer = (feature: ConservationZoneFeature, latlng: LatLngExpression): Layer => {
@@ -85,7 +70,7 @@ export function MapView() {
     return L.circleMarker(latlng, {
       radius: 8,
       fillColor: getColor(Observation_Count),
-      color: "#000",
+      color: "#000", // border color for the circle
       weight: 1,
       opacity: 1,
       fillOpacity: 0.8,
@@ -104,14 +89,7 @@ export function MapView() {
     layer.bindPopup(popupContent);
   };
   
-  if (!mapReady) {
-    return (
-      <div className="aspect-[16/9] w-full bg-muted rounded-lg shadow flex items-center justify-center">
-        <p className="text-muted-foreground">Loading map...</p>
-      </div>
-    );
-  }
-
+  // Removed !mapReady check
   if (error) {
     return (
       <div className="aspect-[16/9] w-full bg-destructive/10 text-destructive rounded-lg shadow flex items-center justify-center p-4">
@@ -128,9 +106,8 @@ export function MapView() {
     );
   }
   
-  // Calculate a suitable center. For simplicity, use the first point or a default.
-  const defaultCenter: LatLngExpression = [40.758896, -73.985130]; // Default to NYC area
-  const center = geoData.features.length > 0 && geoData.features[0].geometry 
+  const defaultCenter: LatLngExpression = [40.758896, -73.985130]; 
+  const center = geoData.features.length > 0 && geoData.features[0].geometry?.type === 'Point'
     ? [geoData.features[0].geometry.coordinates[1], geoData.features[0].geometry.coordinates[0]] as LatLngExpression
     : defaultCenter;
 
@@ -138,21 +115,23 @@ export function MapView() {
     <div className="relative aspect-[16/9] w-full bg-muted rounded-lg overflow-hidden shadow">
       <MapContainer
         center={center}
-        zoom={10}
+        zoom={7} // Adjusted default zoom
         scrollWheelZoom={true}
         style={{ height: "100%", width: "100%" }}
-        className="z-0" // ensure map is behind legend
+        className="z-0" 
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        <GeoJSON
-          key={JSON.stringify(geoData)} // Re-render if data changes
-          data={geoData}
-          pointToLayer={pointToLayer}
-          onEachFeature={onEachFeature}
-        />
+        {geoData && ( // Ensure geoData is available before rendering GeoJSON
+          <GeoJSON
+            key={JSON.stringify(geoData)} 
+            data={geoData}
+            pointToLayer={pointToLayer}
+            onEachFeature={onEachFeature}
+          />
+        )}
       </MapContainer>
       <Legend />
     </div>

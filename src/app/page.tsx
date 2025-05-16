@@ -2,8 +2,9 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from 'next/dynamic';
 import { FileUploadForm } from "@/components/geolens/file-upload-form";
-import { MapView } from "@/components/geolens/map-view";
+// import { MapView } from "@/components/geolens/map-view"; // Replaced with dynamic import
 import { ReportDisplay } from "@/components/geolens/report-display";
 import {
   generateBiasReport,
@@ -16,6 +17,17 @@ import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
 import { Globe, FileText, BarChartBig, UploadCloud, Loader2 } from "lucide-react";
 
+const MapView = dynamic(
+  () => import('@/components/geolens/map-view').then((mod) => mod.MapView),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="aspect-[16/9] w-full bg-muted rounded-lg shadow flex items-center justify-center">
+        <p className="text-muted-foreground">Loading map...</p>
+      </div>
+    ),
+  }
+);
 
 export default function GeoLensPage() {
   const [report, setReport] = useState<GenerateBiasReportOutput | null>(null);
@@ -102,7 +114,7 @@ export default function GeoLensPage() {
                         <Globe className="w-6 h-6 text-accent" />
                         <CardTitle className="text-xl">Geospatial Overview</CardTitle>
                       </div>
-                      <CardDescription>A visual representation of your data (placeholder).</CardDescription>
+                      <CardDescription>An interactive map displaying conservation zones from your data.</CardDescription>
                     </CardHeader>
                     <CardContent>
                       <MapView />
@@ -155,15 +167,3 @@ export default function GeoLensPage() {
     </div>
   );
 }
-
-// Helper component for loading state, if preferred over inline
-// const LoadingSpinner = () => (
-//   <div className="flex items-center justify-center space-x-2">
-//     <svg className="animate-spin h-5 w-5 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-//       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-//       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-//     </svg>
-//     <span>Generating report...</span>
-//   </div>
-// );
-
