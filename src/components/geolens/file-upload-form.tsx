@@ -55,12 +55,42 @@ interface FileUploadFormProps {
   isLoading: boolean;
 }
 
+// Helper to convert ArrayBuffer to Base64
+const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return window.btoa(binary);
+};
+
 const readFileAsDataURI = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
+    reader.onload = () => {
+      const arrayBuffer = reader.result as ArrayBuffer;
+      const base64Data = arrayBufferToBase64(arrayBuffer);
+      
+      const fileExtension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+      let mimeType: string;
+
+      if (fileExtension === ".geojson" || fileExtension === ".json") {
+        mimeType = "application/json";
+      } else if (fileExtension === ".csv") {
+        mimeType = "text/csv";
+      } else {
+        // This case should ideally not be reached due to form validation
+        // If it is, reject to prevent sending unsupported types
+        reject(new Error(`Cannot determine a supported MIME type for file extension: ${fileExtension}`));
+        return;
+      }
+      
+      resolve(`data:${mimeType};base64,${base64Data}`);
+    };
     reader.onerror = (error) => reject(error);
-    reader.readAsDataURL(file);
+    reader.readAsArrayBuffer(file); // Read as ArrayBuffer to manually construct data URI
   });
 };
 
@@ -84,7 +114,11 @@ export function FileUploadForm({
       });
     } catch (error) {
       console.error("Error processing file or submitting form:", error);
-      form.setError("geoFile", { type: "manual", message: "Could not read file." });
+      let message = "Could not read file or an unknown error occurred.";
+      if (error instanceof Error) {
+        message = error.message;
+      }
+      form.setError("geoFile", { type: "manual", message });
     }
   };
 
