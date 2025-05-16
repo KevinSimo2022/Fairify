@@ -14,7 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
-import { Globe, FileText, BarChartBig, UploadCloud } from "lucide-react";
+import { Globe, FileText, BarChartBig, UploadCloud, Loader2 } from "lucide-react";
 
 
 export default function GeoLensPage() {
