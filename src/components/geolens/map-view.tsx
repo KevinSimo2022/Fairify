@@ -3,8 +3,8 @@
 
 import { useEffect, useState } from "react";
 import type { Feature, FeatureCollection, Point } from "geojson";
-import { MapContainer, TileLayer, GeoJSON } from "react-leaflet"; // Removed Popup as it's used in onEachFeature
-import type { LatLngExpression, Layer } from "leaflet"; // Removed GeoJSON as LeafletGeoJSON as it's not directly used
+import { MapContainer, TileLayer, GeoJSON } from "react-leaflet";
+import type { LatLngExpression, Layer } from "leaflet";
 import "leaflet/dist/leaflet.css";
 import L from 'leaflet'; 
 
@@ -40,7 +40,6 @@ const Legend = () => (
 export function MapView() {
   const [geoData, setGeoData] = useState<ConservationZoneFeatureCollection | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // const [mapReady, setMapReady] = useState(false); // Removed mapReady state
 
   useEffect(() => {
     const fetchData = async () => {
@@ -89,7 +88,6 @@ export function MapView() {
     layer.bindPopup(popupContent);
   };
   
-  // Removed !mapReady check
   if (error) {
     return (
       <div className="aspect-[16/9] w-full bg-destructive/10 text-destructive rounded-lg shadow flex items-center justify-center p-4">
@@ -114,8 +112,9 @@ export function MapView() {
   return (
     <div className="relative aspect-[16/9] w-full bg-muted rounded-lg overflow-hidden shadow">
       <MapContainer
+        key={JSON.stringify(geoData)} // Add key to force remount when geoData changes
         center={center}
-        zoom={7} // Adjusted default zoom
+        zoom={7} 
         scrollWheelZoom={true}
         style={{ height: "100%", width: "100%" }}
         className="z-0" 
@@ -124,14 +123,12 @@ export function MapView() {
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        {geoData && ( // Ensure geoData is available before rendering GeoJSON
-          <GeoJSON
-            key={JSON.stringify(geoData)} 
-            data={geoData}
-            pointToLayer={pointToLayer}
-            onEachFeature={onEachFeature}
-          />
-        )}
+        <GeoJSON
+          key={`geojson-layer-${JSON.stringify(geoData)}`} // Ensure GeoJSON layer also updates distinctly
+          data={geoData}
+          pointToLayer={pointToLayer}
+          onEachFeature={onEachFeature}
+        />
       </MapContainer>
       <Legend />
     </div>
