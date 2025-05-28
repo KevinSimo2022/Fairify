@@ -1,12 +1,12 @@
 
 "use client";
 
-import { useEffect, useState, useRef } from "react"; // Added useRef
-import type { Feature, FeatureCollection, Point } from "geojson";
+import { useEffect, useState, useRef } from "react";
+import type { Feature, FeatureCollection, Point, GeoJsonObject } from "geojson";
 import { MapContainer, TileLayer, GeoJSON } from "react-leaflet";
-import type { LatLngExpression, Layer, Map as LeafletMap } from "leaflet"; // Added Map type
+import type { LatLngExpression, Layer, Map as LeafletMap, GeoJSON as LeafletGeoJSONType } from "leaflet";
 import "leaflet/dist/leaflet.css";
-import L from 'leaflet'; 
+import L from "leaflet";
 
 interface ConservationZoneProperties {
   Zone_Name: string;
@@ -40,7 +40,11 @@ const Legend = () => (
 export function MapView() {
   const [geoData, setGeoData] = useState<ConservationZoneFeatureCollection | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const mapInstanceRef = useRef<LeafletMap | null>(null); // Ref to store map instance
+  const mapInstanceRef = useRef<LeafletMap | null>(null);
+  const geoJsonLayerRef = useRef<LeafletGeoJSONType<ConservationZoneProperties> | null>(null);
+
+  const defaultCenter: LatLngExpression = [20, 0]; 
+  const defaultZoom = 2;
 
   useEffect(() => {
     const fetchData = async () => {
@@ -58,19 +62,38 @@ export function MapView() {
     };
     fetchData();
 
-    // Cleanup function for when the component unmounts
     return () => {
       if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove(); // Leaflet's own cleanup method
+        mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
       }
     };
-  }, []); // Empty dependency array: fetch data once on mount, cleanup on unmount
+  }, []);
+
+  useEffect(() => {
+    if (mapInstanceRef.current && geoJsonLayerRef.current) {
+      const map = mapInstanceRef.current;
+      const layer = geoJsonLayerRef.current;
+      try {
+        const bounds = layer.getBounds();
+        if (bounds && bounds.isValid()) {
+          map.fitBounds(bounds, { padding: [50, 50] });
+        } else if (geoData && geoData.features.length === 0) {
+           map.setView(defaultCenter, defaultZoom); // Reset to default if no features or invalid bounds
+        }
+      } catch (e) {
+        console.error("Error fitting bounds: ", e);
+         map.setView(defaultCenter, defaultZoom); // Fallback if getBounds fails
+      }
+    } else if (mapInstanceRef.current && geoData && geoData.features.length === 0) {
+        mapInstanceRef.current.setView(defaultCenter, defaultZoom);
+    }
+  }, [geoData]); // Depends on geoData, mapInstanceRef and geoJsonLayerRef implicitly via their .current values
 
   const getColor = (observationCount: number) => {
-    if (observationCount >= 50) return "green"; 
-    if (observationCount >= 20) return "yellow"; 
-    return "red"; 
+    if (observationCount >= 50) return "green";
+    if (observationCount >= 20) return "yellow";
+    return "red";
   };
 
   const pointToLayer = (feature: ConservationZoneFeature, latlng: LatLngExpression): Layer => {
@@ -78,7 +101,7 @@ export function MapView() {
     return L.circleMarker(latlng, {
       radius: 8,
       fillColor: getColor(Observation_Count),
-      color: "#000", // border color for the circle
+      color: "#000",
       weight: 1,
       opacity: 1,
       fillOpacity: 0.8,
@@ -96,7 +119,7 @@ export function MapView() {
     `;
     layer.bindPopup(popupContent);
   };
-  
+
   if (error) {
     return (
       <div className="aspect-[16/9] w-full bg-destructive/10 text-destructive rounded-lg shadow flex items-center justify-center p-4">
@@ -112,33 +135,40 @@ export function MapView() {
       </div>
     );
   }
-  
-  const defaultCenter: LatLngExpression = [40.758896, -73.985130]; 
-  const center = geoData.features.length > 0 && geoData.features[0].geometry?.type === 'Point'
-    ? [geoData.features[0].geometry.coordinates[1], geoData.features[0].geometry.coordinates[0]] as LatLngExpression
-    : defaultCenter;
 
   return (
     <div className="relative aspect-[16/9] w-full bg-muted rounded-lg overflow-hidden shadow">
       <MapContainer
-        // Removed the key here as manual instance management is now primary for HMR
-        center={center}
-        zoom={7} 
+        key={geoData ? 'map-data-loaded' : 'map-loading'} // Simplified key
+        center={defaultCenter}
+        zoom={defaultZoom}
         scrollWheelZoom={true}
         style={{ height: "100%", width: "100%" }}
-        className="z-0" 
-        whenCreated={(map) => { mapInstanceRef.current = map; }} // Store map instance
+        className="z-0"
+        whenReady={(mapEvent) => {
+          mapInstanceRef.current = mapEvent.target;
+          // Fit bounds logic is now primarily in useEffect, but can be triggered here too if layer is ready
+           if (geoJsonLayerRef.current && mapEvent.target) {
+             const bounds = geoJsonLayerRef.current.getBounds();
+             if (bounds.isValid()) {
+                mapEvent.target.fitBounds(bounds, { padding: [50, 50] });
+             }
+          }
+        }}
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        <GeoJSON
-          key={`geojson-layer-${JSON.stringify(geoData)}`} // Key for GeoJSON layer data changes
-          data={geoData}
-          pointToLayer={pointToLayer}
-          onEachFeature={onEachFeature}
-        />
+        {geoData && geoData.features.length > 0 && (
+          <GeoJSON
+            // No explicit key needed here if MapContainer's key handles remounts
+            ref={geoJsonLayerRef} 
+            data={geoData as GeoJsonObject} 
+            pointToLayer={pointToLayer}
+            onEachFeature={onEachFeature}
+          />
+        )}
       </MapContainer>
       <Legend />
     </div>

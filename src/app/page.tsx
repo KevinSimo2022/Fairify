@@ -35,6 +35,7 @@ export default function GeoLensPage() {
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
   const [showAnalysisSection, setShowAnalysisSection] = useState(false);
+  const [showMapView, setShowMapView] = useState(false);
 
   const handleFormSubmit = async (data: GenerateBiasReportInput) => {
     setIsLoading(true);
@@ -45,6 +46,7 @@ export default function GeoLensPage() {
     try {
       const result = await generateBiasReport(data);
       setReport(result);
+      setShowMapView(true); // Set to true after data is successfully processed
       toast({
         title: "Report Generated Successfully",
         description: "The bias report for your dataset is ready.",
@@ -117,7 +119,7 @@ export default function GeoLensPage() {
                       <CardDescription>An interactive map displaying conservation zones from your data.</CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <MapView />
+                      {showMapView && <MapView />}
                     </CardContent>
                   </Card>
                 </div>
