@@ -17,18 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
 import { Globe, FileText, BarChartBig, UploadCloud, Loader2 } from "lucide-react";
 
-const MapView = dynamic(
-  () => import('@/components/geolens/map-view').then((mod) => mod.MapView),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="aspect-[16/9] w-full bg-muted rounded-lg shadow flex items-center justify-center">
-        <p className="text-muted-foreground">Loading map...</p>
-      </div>
-    ),
-  }
-);
-
+// import dynamic from 'next/dynamic'; // Keep import if needed elsewhere
 export default function GeoLensPage() {
   const [report, setReport] = useState<GenerateBiasReportOutput | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -119,7 +108,11 @@ export default function GeoLensPage() {
                       <CardDescription>An interactive map displaying conservation zones from your data.</CardDescription>
                     </CardHeader>
                     <CardContent>
-                      {showMapView && <MapView />}
+                      {/* {showMapView && <MapView />} */}
+                      {showMapView && (
+                        <div className="aspect-[16/9] w-full bg-muted rounded-lg shadow flex items-center justify-center">
+                          <p className="text-muted-foreground">Map Placeholder</p>
+                        </div>)}
                     </CardContent>
                   </Card>
                 </div>
