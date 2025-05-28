@@ -62,6 +62,7 @@ export function MapView() {
     };
     fetchData();
 
+    // Cleanup function for when the MapView component unmounts
     return () => {
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
@@ -71,24 +72,29 @@ export function MapView() {
   }, []);
 
   useEffect(() => {
-    if (mapInstanceRef.current && geoJsonLayerRef.current) {
-      const map = mapInstanceRef.current;
-      const layer = geoJsonLayerRef.current;
-      try {
-        const bounds = layer.getBounds();
-        if (bounds && bounds.isValid()) {
-          map.fitBounds(bounds, { padding: [50, 50] });
-        } else if (geoData && geoData.features.length === 0) {
-           map.setView(defaultCenter, defaultZoom); // Reset to default if no features or invalid bounds
+    const map = mapInstanceRef.current;
+    const layer = geoJsonLayerRef.current;
+
+    if (map && geoData) { // Ensure map instance and geoData are available
+      if (geoData.features.length > 0 && layer) {
+        try {
+          const bounds = layer.getBounds();
+          if (bounds && bounds.isValid()) {
+            map.fitBounds(bounds, { padding: [50, 50] });
+          } else {
+            // If bounds are not valid (e.g. single point, empty layer), set default view
+            map.setView(defaultCenter, defaultZoom);
+          }
+        } catch (e) {
+          console.error("Error fitting bounds: ", e);
+          map.setView(defaultCenter, defaultZoom); // Fallback if getBounds fails
         }
-      } catch (e) {
-        console.error("Error fitting bounds: ", e);
-         map.setView(defaultCenter, defaultZoom); // Fallback if getBounds fails
+      } else if (geoData.features.length === 0) {
+         // If there's data but no features, reset to default view
+        map.setView(defaultCenter, defaultZoom);
       }
-    } else if (mapInstanceRef.current && geoData && geoData.features.length === 0) {
-        mapInstanceRef.current.setView(defaultCenter, defaultZoom);
     }
-  }, [geoData]); // Depends on geoData, mapInstanceRef and geoJsonLayerRef implicitly via their .current values
+  }, [geoData, defaultCenter, defaultZoom]); // Effect runs when geoData, defaultCenter, or defaultZoom changes
 
   const getColor = (observationCount: number) => {
     if (observationCount >= 50) return "green";
@@ -139,7 +145,7 @@ export function MapView() {
   return (
     <div className="relative aspect-[16/9] w-full bg-muted rounded-lg overflow-hidden shadow">
       <MapContainer
-        key={geoData ? 'map-data-loaded' : 'map-loading'} // Simplified key
+        key={geoData ? 'map-data-loaded' : 'map-loading'} // Key to help React manage re-mounts
         center={defaultCenter}
         zoom={defaultZoom}
         scrollWheelZoom={true}
@@ -147,13 +153,7 @@ export function MapView() {
         className="z-0"
         whenReady={(mapEvent) => {
           mapInstanceRef.current = mapEvent.target;
-          // Fit bounds logic is now primarily in useEffect, but can be triggered here too if layer is ready
-           if (geoJsonLayerRef.current && mapEvent.target) {
-             const bounds = geoJsonLayerRef.current.getBounds();
-             if (bounds.isValid()) {
-                mapEvent.target.fitBounds(bounds, { padding: [50, 50] });
-             }
-          }
+          // Removed fitBounds logic from here, it's handled by useEffect
         }}
       >
         <TileLayer
@@ -162,7 +162,6 @@ export function MapView() {
         />
         {geoData && geoData.features.length > 0 && (
           <GeoJSON
-            // No explicit key needed here if MapContainer's key handles remounts
             ref={geoJsonLayerRef} 
             data={geoData as GeoJsonObject} 
             pointToLayer={pointToLayer}
