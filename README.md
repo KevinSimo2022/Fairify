@@ -1,6 +1,5 @@
 # Fairify - Geospatial Bias Analysis Platform
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue.svg)](https://typescript.org)
 [![React](https://img.shields.io/badge/React-18.0-blue.svg)](https://reactjs.org)
 [![Firebase](https://img.shields.io/badge/Firebase-9.0-orange.svg)](https://firebase.google.com)
@@ -104,8 +103,6 @@ For local development with Firebase emulators:
 
 2. **Update environment variables**
    Set `VITE_USE_EMULATORS=true` in your `.env` file
-
-## 📁 Project Structure
 
 ## 📁 Project Structure
 
