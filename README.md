@@ -1,5 +1,11 @@
 # Fairify - Geospatial Bias Analysis Platform
 
+Github Repo Link:
+https://github.com/KevinSimo2022/Fairify
+
+Additional Files:
+https://drive.google.com/drive/folders/1ye6k6OmtcMRMZIPuqi7tFLhah3iQS5ic?usp=sharing
+
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue.svg)](https://typescript.org)
 [![React](https://img.shields.io/badge/React-18.0-blue.svg)](https://reactjs.org)
 [![Firebase](https://img.shields.io/badge/Firebase-9.0-orange.svg)](https://firebase.google.com)
