@@ -93,7 +93,7 @@ const Login: React.FC = () => {
               <Map className="w-8 h-8 text-white" />
             </div>
           </div>
-          <h2 className="text-3xl font-roboto font-bold text-gray-900">Maphera</h2>
+          <h2 className="text-3xl font-roboto font-bold text-gray-900">Fairify</h2>
           <p className="mt-2 text-sm text-gray-600 font-open-sans">
             Geospatial Bias Analysis Platform
           </p>

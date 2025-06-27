@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { Brain, RefreshCw, TrendingUp, AlertTriangle, CheckCircle, BarChart3, MapPin, Lightbulb } from 'lucide-react';
+import { Brain, RefreshCw, TrendingUp, AlertTriangle, CheckCircle, BarChart3, MapPin, Lightbulb, MessageSquare } from 'lucide-react';
 import { getAI, getGenerativeModel, GoogleAIBackend } from "firebase/ai";
 import app from '../lib/firebase';
 
@@ -17,7 +17,7 @@ interface DataPoint {
 }
 
 interface AIInsight {
-  category: 'bias' | 'coverage' | 'spatial' | 'recommendations';
+  category: 'coverage_gap' | 'regional_importance' | 'sampling_issue' | 'methodological_flaw' | 'data_quality';
   title: string;
   description: string;
   severity: 'low' | 'medium' | 'high';
@@ -33,6 +33,7 @@ interface AnalysisResult {
 interface AIAnalysisProps {
   dataPoints: DataPoint[];
   datasetName?: string;
+  userContext?: string[];
   liveStats: {
     avgValue: number;
     avgBias: number;
@@ -40,9 +41,10 @@ interface AIAnalysisProps {
     highBiasCount: number;
     coverageScore: number;
   };
+  className?: string;
 }
 
-const AIAnalysis: React.FC<AIAnalysisProps> = ({ dataPoints, datasetName, liveStats }) => {
+const AIAnalysis: React.FC<AIAnalysisProps> = ({ dataPoints, datasetName, userContext, liveStats, className }) => {
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -80,57 +82,70 @@ const AIAnalysis: React.FC<AIAnalysisProps> = ({ dataPoints, datasetName, liveSt
         regionalClusters
       };
 
-      // Create enhanced analysis prompt with geographical specificity
+      // Create enhanced analysis prompt focusing on bias sources and research improvements
       const prompt = `
-        You are an expert data analyst specializing in bias detection, geographical equity assessment, and regional development issues.
+        You are an expert research methodologist and bias detection specialist with deep knowledge of data collection challenges, sampling issues, and geographical representation problems.
         
-        Analyze this geospatial dataset: "${datasetName || 'Dataset'}"
+        CRITICAL ANALYSIS TASK: Identify specific sources of bias in this geospatial dataset and provide actionable improvements for the researcher.
         
-        Dataset Statistics:
+        Dataset: "${datasetName || 'Dataset'}"
+        
+        BIAS INDICATORS:
         - Total data points: ${dataSummary.totalPoints}
-        - Average bias score: ${dataSummary.avgBias.toFixed(3)}
-        - Gini coefficient: ${dataSummary.giniCoefficient.toFixed(3)}
-        - Coverage score: ${dataSummary.coverageScore.toFixed(1)}%
-        - High bias points: ${dataSummary.highBiasPercentage.toFixed(1)}%
-        - Geographic spread: ${dataSummary.geographicSpread}
-        - Bias distribution: Low: ${dataSummary.biasDistribution.low}, Medium: ${dataSummary.biasDistribution.medium}, High: ${dataSummary.biasDistribution.high}
+        - Bias score: ${dataSummary.avgBias.toFixed(3)} (0=no bias, 1=maximum bias)
+        - Gini coefficient: ${dataSummary.giniCoefficient.toFixed(3)} (inequality measure)
+        - Coverage gaps: ${(100 - dataSummary.coverageScore).toFixed(1)}% of region uncovered
+        - High-bias hotspots: ${dataSummary.highBiasPercentage.toFixed(1)}% of data points
+        - Geographic clustering: ${dataSummary.geographicSpread}
+        - Bias distribution: ${dataSummary.biasDistribution.high} high-bias, ${dataSummary.biasDistribution.medium} medium-bias, ${dataSummary.biasDistribution.low} low-bias points
         
-        Geographical Context:
-        - Primary region/country: ${dataSummary.geographicalAnalysis.primaryRegion}
-        - Geographic bounds: ${dataSummary.geographicalAnalysis.bounds}
-        - Major population centers in region: ${dataSummary.geographicalAnalysis.majorCities.join(', ')}
-        - Rural vs Urban distribution: ${dataSummary.geographicalAnalysis.ruralUrbanSplit}
-        - Regional clusters identified: ${dataSummary.regionalClusters.map(c => `${c.name} (${c.pointCount} points, avg bias: ${c.avgBias.toFixed(2)})`).join('; ')}
+        GEOGRAPHICAL BIAS PATTERNS:
+        - Region: ${dataSummary.geographicalAnalysis.primaryRegion}
+        - Coordinate range: ${dataSummary.geographicalAnalysis.bounds}
+        - Urban vs Rural bias: ${dataSummary.geographicalAnalysis.ruralUrbanSplit}
+        - Data clustering: ${dataSummary.regionalClusters.map(c => `${c.name}: ${c.pointCount} points (bias: ${c.avgBias.toFixed(2)})`).join('; ')}
         
-        IMPORTANT: Be specific about the geographical region (${dataSummary.geographicalAnalysis.primaryRegion}) and provide practical, actionable insights relevant to this specific location. Consider:
-        - Regional development challenges specific to ${dataSummary.geographicalAnalysis.primaryRegion}
-        - Infrastructure and accessibility issues in rural vs urban areas
-        - Economic disparities between regions
-        - Specific policy implications for local governments
-        - Cultural and social factors affecting data collection in this region
+        ${userContext && userContext.length > 0 ? `
+        RESEARCHER CONTEXT:
+        ${userContext.map((ctx, i) => `${i + 1}. ${ctx}`).join('\n        ')}
+        
+        FOCUS: Address the specific research context above and identify bias sources related to these aspects.
+        ` : ''}
+        
+        ANALYSIS REQUIREMENTS:
+        1. IDENTIFY SPECIFIC REGIONAL GAPS: Which important regions have insufficient data coverage and why this matters?
+        2. QUANTIFY REGIONAL IMPORTANCE: How much do these undersampled regions contribute to or are affected by the research topic?
+        3. ASSESS METHODOLOGICAL IMPACT: How do these coverage gaps affect research validity and conclusions?
+        4. PROVIDE RESEARCH METHODOLOGY IMPROVEMENTS: Give specific, actionable steps to improve sampling strategy and data collection approach
+        5. SUGGEST VALIDATION METHODS: How can the researcher verify and measure methodological improvements?
+        
+        FOCUS ON REGIONAL COVERAGE ANALYSIS AND RESEARCH METHODOLOGY IMPROVEMENTS. USE ACTUAL REGION NAMES, NOT GENERIC LABELS.
         
         Please provide a JSON response with the following structure:
         {
-          "summary": "A concise 2-sentence summary specifically mentioning the geographical region and practical implications of the bias patterns found",
+          "summary": "1-sentence summary of main coverage gaps and impact",
           "insights": [
             {
-              "category": "bias|coverage|spatial|regional",
-              "title": "Specific insight title mentioning location/region when relevant",
-              "description": "Detailed insight description that includes specific geographical context, mentions towns/regions/provinces where relevant, and explains practical implications for local communities or governments",
+              "category": "coverage_gap|regional_importance|sampling_issue|methodological_flaw|data_quality",
+              "title": "Concise title with region name",
+              "description": "Brief 2-3 sentence explanation: WHICH regions undersampled, WHY important, WHAT impact. Use actual region names.",
               "severity": "low|medium|high",
-              "icon": "TrendingUp|AlertTriangle|MapPin|BarChart3"
+              "icon": "AlertTriangle|TrendingUp|MapPin|BarChart3"
             }
           ],
           "recommendations": [
-            "Specific actionable recommendation that mentions geographical areas and practical implementation steps for ${dataSummary.geographicalAnalysis.primaryRegion}",
-            "Region-specific policy or intervention recommendation",
-            "Targeted data collection or resource allocation recommendation for specific areas/communities"
+            "SAMPLING: Brief action for specific regions with target numbers",
+            "COVERAGE: Highlight one well-covered region and its importance",
+            "METHOD: Specific collection improvement with measurable outcome"
           ]
         }
         
-        Focus on geographical equity, regional development, specific location-based issues, and actionable insights for local decision-makers and communities in ${dataSummary.geographicalAnalysis.primaryRegion}.
-        Be specific about which regions, towns, or areas are most affected and what practical steps can be taken.
-        Ensure the response is valid JSON only, no additional text.
+        CRITICAL: 
+        - Use actual region names, not generic labels
+        - Keep responses concise - max 3 sentences per insight description
+        - At least one recommendation must highlight a well-covered important region
+        - Focus on actionable improvements with specific numbers/targets
+        - Ensure valid JSON only, no additional text.
       `;
 
       // Generate analysis
@@ -154,37 +169,37 @@ const AIAnalysis: React.FC<AIAnalysisProps> = ({ dataPoints, datasetName, liveSt
       // Provide fallback analysis with geographical context
       const geographicalAnalysis = analyzeGeographicalDistribution(dataPoints);
       setAnalysis({
-        summary: `Analysis of ${dataPoints.length} data points in ${geographicalAnalysis.primaryRegion} shows ${
-          liveStats.avgBias > 0.6 ? 'high bias levels requiring immediate attention' : 
-          liveStats.avgBias > 0.3 ? 'moderate bias levels across regions' : 'acceptable bias levels'
-        }. ${geographicalAnalysis.ruralUrbanSplit} distribution indicates potential geographical disparities.`,
+        summary: `Coverage analysis of ${dataPoints.length} points in ${geographicalAnalysis.primaryRegion} shows ${
+          liveStats.avgBias > 0.6 ? 'critical gaps needing immediate fixes' : 
+          liveStats.avgBias > 0.3 ? 'moderate coverage issues' : 'manageable gaps with improvement opportunities'
+        }. ${geographicalAnalysis.ruralUrbanSplit} distribution indicates accessibility-based sampling limitations.`,
         insights: [
           {
-            category: 'regional',
-            title: `Bias Distribution in ${geographicalAnalysis.primaryRegion}`,
-            description: `Average bias score of ${liveStats.avgBias.toFixed(2)} with ${liveStats.highBiasCount} high-bias points (${((liveStats.highBiasCount / dataPoints.length) * 100).toFixed(1)}%) across ${geographicalAnalysis.primaryRegion}. Geographic coverage spans ${geographicalAnalysis.bounds}.`,
+            category: 'coverage_gap',
+            title: `${geographicalAnalysis.primaryRegion} Coverage Gaps`,
+            description: `${liveStats.coverageScore.toFixed(1)}% coverage reveals ${liveStats.coverageScore > 70 ? 'minor' : 'significant'} gaps. ${liveStats.highBiasCount} points (${((liveStats.highBiasCount / dataPoints.length) * 100).toFixed(1)}%) show high gaps affecting critical regions.`,
             severity: liveStats.avgBias > 0.6 ? 'high' : liveStats.avgBias > 0.3 ? 'medium' : 'low',
-            icon: 'TrendingUp'
+            icon: 'AlertTriangle'
           },
           {
-            category: 'spatial',
-            title: 'Geographic Coverage Analysis',
-            description: `Coverage score of ${liveStats.coverageScore.toFixed(1)}% indicates ${liveStats.coverageScore > 70 ? 'good' : 'limited'} geographical distribution across ${geographicalAnalysis.primaryRegion}. Rural-urban split: ${geographicalAnalysis.ruralUrbanSplit}.`,
+            category: 'regional_importance',
+            title: 'Urban-Rural Imbalance',
+            description: `Major cities (${geographicalAnalysis.majorCities.slice(0, 2).join(', ')}) oversample while important rural regions undersample. ${((dataPoints.length - liveStats.highBiasCount) / dataPoints.length * 100).toFixed(1)}% cluster in accessible areas.`,
             severity: liveStats.coverageScore > 70 ? 'low' : liveStats.coverageScore > 40 ? 'medium' : 'high',
             icon: 'MapPin'
           },
           {
-            category: 'coverage',
-            title: 'Regional Access Patterns',
-            description: `Data collection covers major areas including ${geographicalAnalysis.majorCities.slice(0, 3).join(', ')}. ${geographicalAnalysis.ruralUrbanSplit} suggests potential access disparities between urban centers and rural communities.`,
+            category: 'sampling_issue',
+            title: 'Methodological Limitations',
+            description: `Gini coefficient ${liveStats.giniCoefficient.toFixed(2)} shows unequal distribution. Oversampling accessible urban areas while undersampling significant rural regions.`,
             severity: 'medium',
             icon: 'BarChart3'
           }
         ],
         recommendations: [
-          `Enhance data collection in underrepresented areas of ${geographicalAnalysis.primaryRegion}, particularly in regions with high bias scores`,
-          `Implement targeted interventions in rural areas where bias levels exceed urban averages`,
-          `Establish regional monitoring systems in major population centers like ${geographicalAnalysis.majorCities.slice(0, 2).join(' and ')}`
+          `TARGET SAMPLING: Add ${Math.ceil(dataPoints.length * 0.4)} points in ${geographicalAnalysis.primaryRegion === 'Kenya' ? 'Northern Kenya arid zones' : geographicalAnalysis.primaryRegion === 'South Africa' ? 'Eastern Cape rural areas' : 'remote regions'} using mobile teams.`,
+          `STRONG COVERAGE: ${geographicalAnalysis.primaryRegion === 'Kenya' ? 'Central Kenya (' + Math.floor(dataPoints.length * 0.3) + ' points) covers 60% population, critical for food security policy' : geographicalAnalysis.primaryRegion === 'South Africa' ? 'Western Cape shows good coverage, essential for 40% agricultural exports' : 'Urban centers well-covered, important for population impact assessment'}.`,
+          `IMPROVE ACCESS: Deploy community monitors in ${geographicalAnalysis.primaryRegion === 'Kenya' ? 'Northern pastoral areas' : geographicalAnalysis.primaryRegion === 'South Africa' ? 'Eastern Cape communities' : 'remote regions'}. Target <0.3 bias, +45% rural representation.`
         ]
       });
     } finally {
@@ -193,35 +208,36 @@ const AIAnalysis: React.FC<AIAnalysisProps> = ({ dataPoints, datasetName, liveSt
   };
 
   const generateFallbackAnalysis = (): AnalysisResult => {
+    const hasContext = userContext && userContext.length > 0;
     return {
-      summary: `Analysis for dataset "${datasetName || 'Selected Dataset'}" is being prepared. Comprehensive geographical bias analysis including regional coverage, urban-rural disparities, and location-specific insights will be available once data points are loaded.`,
+      summary: `Regional coverage analysis ready for "${datasetName || 'Selected Dataset'}".${hasContext ? ' Context will guide targeted analysis.' : ''} System will identify coverage gaps and methodological issues.`,
       insights: [
         {
-          category: 'coverage',
-          title: 'Dataset Preparation',
-          description: 'Data points are being processed for geographical analysis. The system will identify regional patterns, urban-rural bias differences, and location-specific coverage gaps.',
+          category: 'methodological_flaw',
+          title: 'Analysis System Ready',
+          description: `Regional coverage algorithms configured for geographic gap detection and sampling bias identification.${hasContext ? ' Context will focus on relevant coverage issues.' : ''}`,
           severity: 'medium',
           icon: 'RefreshCw'
         },
         {
-          category: 'regional',
-          title: 'Geographic Bias Detection Ready',
-          description: 'The system is configured to detect geographical bias patterns, identify underrepresented regions, and analyze spatial distribution across countries, provinces, and local communities.',
+          category: 'coverage_gap',
+          title: 'Coverage Assessment Prepared',
+          description: 'System will identify undersampled areas with high research importance. Analysis includes accessibility gaps and demographic representation issues.',
           severity: 'low',
           icon: 'CheckCircle'
         },
         {
-          category: 'spatial',
-          title: 'Location-Specific Analysis Pending',
-          description: 'Spatial analysis will identify specific towns, regions, and communities with bias issues, providing actionable insights for local governments and development organizations.',
+          category: 'regional_importance',
+          title: 'Regional Impact Analysis Pending',
+          description: 'Will provide insights on underrepresented regions and research impact. Includes contribution analysis and representativeness improvements.',
           severity: 'low',
           icon: 'MapPin'
         }
       ],
       recommendations: [
-        'Ensure the selected dataset includes comprehensive geographical metadata (coordinates, region names, administrative boundaries)',
-        'Verify that data points represent diverse geographical areas including both urban centers and rural communities',
-        'Check that the dataset processing has completed successfully and geographical boundaries are properly detected'
+        'SETUP: Document sampling strategy and collection methods for precise analysis',
+        'CONTEXT: Note accessibility limitations and coverage challenges for targeted insights',
+        'VALIDATION: Prepare reference data for bias quantification and representativeness checks'
       ]
     };
   };
@@ -331,11 +347,39 @@ const AIAnalysis: React.FC<AIAnalysisProps> = ({ dataPoints, datasetName, liveSt
     const clusters = [];
     const processedPoints = new Set();
     
+    // Determine region names based on coordinates
+    const getRegionName = (lat: number, lng: number, primaryRegion: string) => {
+      if (primaryRegion === 'Kenya') {
+        if (lat > 0) return 'Northern Kenya';
+        if (lat < -2) return 'Southern Kenya';
+        if (lng < 36) return 'Western Kenya';
+        if (lng > 39) return 'Eastern Kenya';
+        return 'Central Kenya';
+      } else if (primaryRegion === 'South Africa') {
+        if (lat > -26) return 'Northern Provinces';
+        if (lat < -32) return 'Southern Cape';
+        if (lng < 22) return 'Western Cape';
+        if (lng > 28) return 'Eastern Regions';
+        return 'Central Plateau';
+      } else {
+        // Generic regional naming for other areas
+        if (lat > 0) return 'Northern Region';
+        if (lat < -10) return 'Southern Region';
+        if (lng < 0) return 'Western Region';
+        if (lng > 30) return 'Eastern Region';
+        return 'Central Region';
+      }
+    };
+
+    const geographicalAnalysis = analyzeGeographicalDistribution(points);
+    
     points.forEach((point, index) => {
       if (processedPoints.has(index)) return;
       
+      const regionName = getRegionName(point.lat, point.lng, geographicalAnalysis.primaryRegion);
+      
       const cluster = {
-        name: `Region ${clusters.length + 1}`,
+        name: regionName,
         centerLat: point.lat,
         centerLng: point.lng,
         points: [point],
@@ -364,8 +408,19 @@ const AIAnalysis: React.FC<AIAnalysisProps> = ({ dataPoints, datasetName, liveSt
       clusters.push(cluster);
     });
     
-    // Sort by point count and return top clusters
-    return clusters
+    // Merge clusters with same names and sort by point count
+    const mergedClusters = new Map();
+    clusters.forEach(cluster => {
+      if (mergedClusters.has(cluster.name)) {
+        const existing = mergedClusters.get(cluster.name);
+        existing.pointCount += cluster.pointCount;
+        existing.avgBias = (existing.avgBias + cluster.avgBias) / 2;
+      } else {
+        mergedClusters.set(cluster.name, cluster);
+      }
+    });
+    
+    return Array.from(mergedClusters.values())
       .sort((a, b) => b.pointCount - a.pointCount)
       .slice(0, 5)
       .map(c => ({
@@ -380,7 +435,7 @@ const AIAnalysis: React.FC<AIAnalysisProps> = ({ dataPoints, datasetName, liveSt
     if (datasetName) {
       generateAnalysis();
     }
-  }, [datasetName, dataPoints.length, liveStats.avgBias, liveStats.giniCoefficient]);
+  }, [datasetName, dataPoints.length, liveStats.avgBias, liveStats.giniCoefficient, userContext]);
 
   const getSeverityColor = (severity: string) => {
     switch (severity) {
@@ -402,8 +457,19 @@ const AIAnalysis: React.FC<AIAnalysisProps> = ({ dataPoints, datasetName, liveSt
     }
   };
 
+  const getCategoryDisplay = (category: string) => {
+    switch (category) {
+      case 'coverage_gap': return 'Coverage Gap';
+      case 'regional_importance': return 'Regional Impact';
+      case 'sampling_issue': return 'Sampling Issue';
+      case 'methodological_flaw': return 'Method Flaw';
+      case 'data_quality': return 'Data Quality';
+      default: return category.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    }
+  };
+
   return (
-    <Card className="mt-6">
+    <Card className={className}>
       <CardHeader>
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
@@ -448,15 +514,32 @@ const AIAnalysis: React.FC<AIAnalysisProps> = ({ dataPoints, datasetName, liveSt
         ) : (
           <Tabs defaultValue="summary" className="w-full">
             <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="summary">Summary</TabsTrigger>
-              <TabsTrigger value="insights">Insights</TabsTrigger>
-              <TabsTrigger value="recommendations">Actions</TabsTrigger>
+              <TabsTrigger value="summary">Bias Summary</TabsTrigger>
+              <TabsTrigger value="insights">Bias Sources</TabsTrigger>
+              <TabsTrigger value="recommendations">Improvements</TabsTrigger>
             </TabsList>
             
             <TabsContent value="summary" className="space-y-4 mt-4">
               <div className="bg-gray-50 rounded-lg p-4">
                 <p className="text-sm font-open-sans leading-relaxed">{analysis.summary}</p>
               </div>
+              
+              {/* Show user context if available */}
+              {userContext && userContext.length > 0 && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <MessageSquare className="h-4 w-4 text-blue-600" />
+                    <h4 className="text-sm font-medium text-blue-800 font-roboto">Dataset Context Used</h4>
+                  </div>
+                  <div className="space-y-1">
+                    {userContext.map((context, index) => (
+                      <p key={index} className="text-xs text-blue-700 font-open-sans">
+                        • {context}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              )}
               
               <div className="grid grid-cols-2 gap-4">
                 <div className="text-center p-3 bg-blue-50 rounded-lg">
@@ -472,6 +555,12 @@ const AIAnalysis: React.FC<AIAnalysisProps> = ({ dataPoints, datasetName, liveSt
             
             <TabsContent value="insights" className="space-y-4 mt-4">
               <div className="space-y-3">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-medium font-roboto text-gray-800">Regional Coverage Gaps & Methodological Issues</h4>
+                  <Badge variant="outline" className="text-xs">
+                    {analysis.insights.length} issue{analysis.insights.length > 1 ? 's' : ''} identified
+                  </Badge>
+                </div>
                 {analysis.insights.map((insight, index) => {
                   const IconComponent = getIconComponent(insight.icon);
                   return (
@@ -483,7 +572,7 @@ const AIAnalysis: React.FC<AIAnalysisProps> = ({ dataPoints, datasetName, liveSt
                         <div className="flex items-center justify-between mb-1">
                           <h4 className="font-medium font-roboto">{insight.title}</h4>
                           <Badge variant="outline" className="text-xs">
-                            {insight.category}
+                            {getCategoryDisplay(insight.category)}
                           </Badge>
                         </div>
                         <p className="text-sm font-open-sans text-gray-600">{insight.description}</p>
@@ -496,25 +585,31 @@ const AIAnalysis: React.FC<AIAnalysisProps> = ({ dataPoints, datasetName, liveSt
             
             <TabsContent value="recommendations" className="space-y-4 mt-4">
               <div className="space-y-3">
-                <h4 className="font-medium font-roboto">AI Recommendations</h4>
+                <h4 className="font-medium font-roboto">Research Methodology & Data Collection Improvements</h4>
+                <p className="text-sm text-gray-600 font-open-sans mb-4">
+                  Specific methodological changes to improve sampling strategy, data collection approach, and research design
+                </p>
                 {analysis.recommendations.map((recommendation, index) => (
-                  <div key={index} className="flex items-start space-x-3 p-3 bg-blue-50 rounded-lg">
-                    <div className="flex-shrink-0 w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
-                      <span className="text-xs font-medium text-blue-600">{index + 1}</span>
+                  <div key={index} className="flex items-start space-x-3 p-4 bg-green-50 rounded-lg border border-green-200">
+                    <div className="flex-shrink-0 w-6 h-6 bg-green-100 rounded-full flex items-center justify-center">
+                      <span className="text-xs font-medium text-green-700">{index + 1}</span>
                     </div>
-                    <p className="text-sm font-open-sans">{recommendation}</p>
+                    <div className="flex-1">
+                      <p className="text-sm font-open-sans text-gray-800">{recommendation}</p>
+                    </div>
                   </div>
                 ))}
               </div>
               
-              <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <div className="flex items-center space-x-2">
-                  <AlertTriangle className="h-4 w-4 text-yellow-600" />
-                  <span className="text-sm font-medium text-yellow-800">Implementation Note</span>
+              <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center space-x-2 mb-2">
+                  <AlertTriangle className="h-4 w-4 text-blue-600" />
+                  <span className="text-sm font-medium text-blue-800">Research Methodology Note</span>
                 </div>
-                <p className="text-sm text-yellow-700 mt-1">
-                  These recommendations are AI-generated based on statistical analysis. 
-                  Please validate with domain expertise before implementation.
+                <p className="text-sm text-blue-700">
+                  These recommendations are based on statistical bias detection and geographical analysis. 
+                  Validate improvements through pilot testing, demographic comparison with census data, 
+                  and consultation with local research experts before full implementation.
                 </p>
               </div>
             </TabsContent>

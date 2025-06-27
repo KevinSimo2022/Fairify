@@ -3,6 +3,9 @@
  * Handles point-in-polygon calculations and regional assignments
  */
 
+import { getDownloadURL, ref as storageRef } from 'firebase/storage';
+import { storage } from '@/lib/firebase';
+
 export interface RegionalBoundary {
   type: 'Feature';
   properties: {
@@ -197,10 +200,36 @@ export function calculateCoverageRatio(regionalStats: RegionalStats[]): { [regio
 /**
  * Get default boundaries based on country
  */
-export async function getBoundariesForCountry(country: 'kenya' | 'south-africa'): Promise<BoundaryCollection> {
-  // In a real implementation, these would be loaded from the JSON files
-  // For now, we'll return simplified boundaries
-  
+export async function getBoundariesForCountry(country: 'kenya' | 'south-africa' | 'rwanda' | 'cameroon'): Promise<BoundaryCollection> {
+  // Try to fetch real boundaries from Firebase Storage
+  let url = '';
+  if (country === 'kenya') {
+    url = 'gs://fairify-94f39.firebasestorage.app/region-boundaries/geoBoundaries-RWA-ADM1.geojson';
+  } else if (country === 'rwanda') {
+    url = 'gs://fairify-94f39.firebasestorage.app/region-boundaries/geoBoundaries-KEN-ADM1.geojson';
+  } else if (country === 'cameroon') {
+    url = 'gs://fairify-94f39.firebasestorage.app/region-boundaries/geoBoundaries-CMR-ADM1.geojson';
+  }
+
+  if (url) {
+    try {
+      // Convert gs:// to https:// download URL
+      const fileRef = storageRef(storage, url.replace('gs://fairify-94f39.firebasestorage.app/', 'region-boundaries/'));
+      const downloadUrl = await getDownloadURL(fileRef);
+      const response = await fetch(downloadUrl);
+      if (response.ok) {
+        const geojson = await response.json();
+        // Ensure the structure matches BoundaryCollection
+        if (geojson.type === 'FeatureCollection') {
+          return geojson as BoundaryCollection;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch real boundaries for', country, e);
+    }
+  }
+
+  // Fallback to demo boundaries
   if (country === 'kenya') {
     return {
       type: 'FeatureCollection',
@@ -243,6 +272,140 @@ export async function getBoundariesForCountry(country: 'kenya' | 'south-africa')
           geometry: {
             type: 'Polygon',
             coordinates: [[[34.0, -2.5], [37.5, -2.5], [37.5, 3.5], [34.0, 3.5], [34.0, -2.5]]]
+          }
+        }
+      ]
+    };
+  } else if (country === 'rwanda') {
+    // Rwanda: 5 provinces (bounding boxes are rough and for demo only)
+    return {
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          properties: { name: 'Kigali', code: 'KGL', population: 1300000 },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [[[30.0, -1.95], [30.2, -1.95], [30.2, -1.85], [30.0, -1.85], [30.0, -1.95]]]
+          }
+        },
+        {
+          type: 'Feature',
+          properties: { name: 'Northern', code: 'N', population: 2500000 },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [[[29.5, -1.5], [30.0, -1.5], [30.0, -1.0], [29.5, -1.0], [29.5, -1.5]]]
+          }
+        },
+        {
+          type: 'Feature',
+          properties: { name: 'Southern', code: 'S', population: 2700000 },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [[[29.5, -2.5], [30.0, -2.5], [30.0, -1.95], [29.5, -1.95], [29.5, -2.5]]]
+          }
+        },
+        {
+          type: 'Feature',
+          properties: { name: 'Eastern', code: 'E', population: 3200000 },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [[[30.0, -2.5], [30.9, -2.5], [30.9, -1.0], [30.0, -1.0], [30.0, -2.5]]]
+          }
+        },
+        {
+          type: 'Feature',
+          properties: { name: 'Western', code: 'W', population: 2900000 },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [[[28.8, -2.5], [29.5, -2.5], [29.5, -1.0], [28.8, -1.0], [28.8, -2.5]]]
+          }
+        }
+      ]
+    };
+  } else if (country === 'cameroon') {
+    // Cameroon: 10 regions (bounding boxes are rough and for demo only)
+    return {
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          properties: { name: 'Adamawa', code: 'ADA', population: 1200000 },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [[[12.0, 6.0], [15.0, 6.0], [15.0, 8.0], [12.0, 8.0], [12.0, 6.0]]]
+          }
+        },
+        {
+          type: 'Feature',
+          properties: { name: 'Centre', code: 'CEN', population: 4000000 },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [[[11.0, 3.0], [13.0, 3.0], [13.0, 5.0], [11.0, 5.0], [11.0, 3.0]]]
+          }
+        },
+        {
+          type: 'Feature',
+          properties: { name: 'East', code: 'EST', population: 800000 },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [[[13.0, 2.0], [16.0, 2.0], [16.0, 5.0], [13.0, 5.0], [13.0, 2.0]]]
+          }
+        },
+        {
+          type: 'Feature',
+          properties: { name: 'Far North', code: 'FNO', population: 3500000 },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [[[13.0, 10.0], [15.0, 10.0], [15.0, 13.0], [13.0, 13.0], [13.0, 10.0]]]
+          }
+        },
+        {
+          type: 'Feature',
+          properties: { name: 'Littoral', code: 'LIT', population: 3600000 },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [[[9.0, 3.0], [11.0, 3.0], [11.0, 5.0], [9.0, 5.0], [9.0, 3.0]]]
+          }
+        },
+        {
+          type: 'Feature',
+          properties: { name: 'North', code: 'NOR', population: 2400000 },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [[[12.0, 8.0], [15.0, 8.0], [15.0, 10.0], [12.0, 10.0], [12.0, 8.0]]]
+          }
+        },
+        {
+          type: 'Feature',
+          properties: { name: 'Northwest', code: 'NWR', population: 1800000 },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [[[9.0, 6.0], [11.0, 6.0], [11.0, 8.0], [9.0, 8.0], [9.0, 6.0]]]
+          }
+        },
+        {
+          type: 'Feature',
+          properties: { name: 'West', code: 'WES', population: 1800000 },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [[[9.0, 5.0], [11.0, 5.0], [11.0, 6.0], [9.0, 6.0], [9.0, 5.0]]]
+          }
+        },
+        {
+          type: 'Feature',
+          properties: { name: 'South', code: 'SOU', population: 800000 },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [[[11.0, 1.0], [13.0, 1.0], [13.0, 3.0], [11.0, 3.0], [11.0, 1.0]]]
+          }
+        },
+        {
+          type: 'Feature',
+          properties: { name: 'Southwest', code: 'SWR', population: 1400000 },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [[[9.0, 3.0], [9.5, 3.0], [9.5, 6.0], [9.0, 6.0], [9.0, 3.0]]]
           }
         }
       ]
@@ -321,4 +484,18 @@ export function detectCountryFromCoordinates(dataPoints: DataPoint[]): 'kenya' |
   }
 
   return 'unknown';
+}
+
+/**
+ * Annotate data points with their region's coverage bias ratio
+ */
+export function annotateDataPointsWithCoverageBias(
+  dataPoints: DataPoint[],
+  regionalStats: RegionalStats[]
+): DataPoint[] {
+  const coverageRatio = calculateCoverageRatio(regionalStats);
+  return dataPoints.map(point => ({
+    ...point,
+    coverageBias: point.region ? coverageRatio[point.region] ?? 0 : 0
+  }));
 }

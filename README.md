@@ -76,7 +76,14 @@ Before you begin, ensure you have the following installed:
    firebase init
    ```
 
-4. **Configure environment variables**
+4. **Configure Vite (optional)**
+   Copy the example Vite config if you want custom settings:
+
+   ```bash
+   cp vite.config.ts.example vite.config.ts
+   ```
+
+5. **Configure environment variables**
    Create a `.env` file in the root directory:
 
    ```env
@@ -89,7 +96,7 @@ Before you begin, ensure you have the following installed:
    VITE_USE_EMULATORS=false
    ```
 
-5. **Start the development server**
+6. **Start the development server**
 
    ```bash
    npm run dev

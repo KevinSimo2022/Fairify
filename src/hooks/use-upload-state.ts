@@ -5,7 +5,7 @@ interface UploadedFile {
   name: string;
   size: number;
   type: string;
-  status: 'uploading' | 'processing' | 'complete' | 'error';
+  status: 'uploading' | 'ready' | 'processing' | 'complete' | 'error';
   progress: number;
   uploadedAt: Date;
   downloadURL?: string;

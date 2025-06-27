@@ -9,6 +9,7 @@ import { httpsCallable } from 'firebase/functions';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { functions, storage } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
+import DatasetContext from '@/components/DatasetContext';
 import { 
   AlertDialog, 
   AlertDialogAction, 
@@ -26,7 +27,7 @@ interface UploadedFile {
   name: string;
   size: number;
   type: string;
-  status: 'uploading' | 'processing' | 'complete' | 'error';
+  status: 'uploading' | 'ready' | 'processing' | 'complete' | 'error';
   progress: number;
   uploadedAt: Date;
   downloadURL?: string;
@@ -37,6 +38,7 @@ const Upload: React.FC = () => {
   const [dragActive, setDragActive] = useState(false);
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
   const [deletingFileId, setDeletingFileId] = useState<string | null>(null);
+  const [datasetContext, setDatasetContext] = useState<string[]>([]);
   const { toast } = useToast();
   const { user } = useAuth();
   const { 
@@ -44,8 +46,13 @@ const Upload: React.FC = () => {
     addUploadedFile, 
     updateUploadedFile, 
     removeUploadedFile,
-    clearUploadedFiles 
+  clearUploadedFiles 
   } = useUploadState(user?.id);
+
+  // Handle context updates from DatasetContext component
+  const handleContextUpdate = useCallback((context: string[]) => {
+    setDatasetContext(context);
+  }, []);
 
   // Function to check if file already exists
   const checkFileExists = async (fileName: string) => {
@@ -159,7 +166,87 @@ const Upload: React.FC = () => {
       console.error('Firebase upload error:', error);
       throw error;
     }
-  };  const processDataset = async (fileId: string, downloadURL: string, fileName: string, fileSize: number) => {
+  };
+
+  // Store file metadata without analyzing
+  const storeFileMetadata = async (fileId: string, downloadURL: string, fileName: string, fileSize: number) => {
+    try {
+      const { doc, setDoc } = await import('firebase/firestore');
+      const { db } = await import('@/lib/firebase');
+      
+      const storagePath = `datasets/${user?.id}/${fileId}_${fileName}`;
+      const datasetRef = doc(db, 'datasets', fileId);
+      
+      await setDoc(datasetRef, {
+        userId: user?.id,
+        filePath: storagePath,
+        downloadURL: downloadURL,
+        fileName: fileName,
+        fileType: fileName.split('.').pop()?.toLowerCase() || 'unknown',
+        fileSize: fileSize,
+        uploadedAt: new Date(),
+        status: 'ready', // File uploaded but not analyzed yet
+        context: null // Will be updated when user provides context
+      });
+    } catch (error) {
+      console.error('Error storing file metadata:', error);
+      throw error;
+    }
+  };
+
+  // Modified processDataset function - now called when user clicks analyze
+  const analyzeDataset = async (fileId: string, fileName: string) => {
+    try {
+      updateUploadedFile(fileId, { status: 'processing' });
+
+      // Update the dataset with current context
+      const { doc, updateDoc } = await import('firebase/firestore');
+      const { db } = await import('@/lib/firebase');
+      
+      const datasetRef = doc(db, 'datasets', fileId);
+      await updateDoc(datasetRef, {
+        context: datasetContext.length > 0 ? datasetContext : null,
+        status: 'processing'
+      });
+
+      // Call the analysis function
+      const analyzeDatasetFunction = httpsCallable(functions, 'analyzeDataset');
+      console.log('Invoking analyzeDataset function with parameters:', {
+        datasetId: fileId,
+        analysisType: 'comprehensive',
+        context: datasetContext
+      });
+
+      const result = await analyzeDatasetFunction({
+        datasetId: fileId,
+        analysisType: 'comprehensive',
+        userContext: datasetContext.length > 0 ? datasetContext : null
+      });
+
+      console.log('Analysis result:', result.data);
+      
+      updateUploadedFile(fileId, { status: 'complete' });
+
+      toast({
+        title: 'Analysis complete',
+        description: `${fileName} has been analyzed successfully.`
+      });
+
+      return result.data;
+    } catch (error: any) {
+      console.error('Analysis error:', error);
+      updateUploadedFile(fileId, { status: 'error', error: error.message });
+      
+      toast({
+        title: 'Analysis failed',
+        description: `${error.code || 'Error'}: ${error.message || 'An error occurred during analysis'}`,
+        variant: 'destructive'
+      });
+      throw error;
+    }
+  };
+
+  const processDataset = async (fileId: string, downloadURL: string, fileName: string, fileSize: number) => {
     try {
       // First, create the dataset document in Firestore
       const { doc, setDoc } = await import('firebase/firestore');
@@ -178,8 +265,7 @@ const Upload: React.FC = () => {
         uploadedAt: new Date(),
         status: 'processing'
       });
-      
-      await setDoc(datasetRef, {
+        await setDoc(datasetRef, {
         userId: user?.id,
         filePath: storagePath, // Use storage path instead of download URL
         downloadURL: downloadURL, // Store download URL separately
@@ -187,19 +273,21 @@ const Upload: React.FC = () => {
         fileType: fileName.split('.').pop()?.toLowerCase() || 'unknown',
         fileSize: fileSize,
         uploadedAt: new Date(),
-        status: 'processing'
+        status: 'processing',
+        context: datasetContext.length > 0 ? datasetContext : null // Add user context
       });
 
       // Then call the analysis function
-      const analyzeDataset = httpsCallable(functions, 'analyzeDataset');
-      console.log('Invoking analyzeDataset function with parameters:', {
+      const analyzeDataset = httpsCallable(functions, 'analyzeDataset');      console.log('Invoking analyzeDataset function with parameters:', {
         datasetId: fileId,
-        analysisType: 'comprehensive'
+        analysisType: 'comprehensive',
+        context: datasetContext
       });
-      
+
       const result = await analyzeDataset({
         datasetId: fileId,
-        analysisType: 'comprehensive'
+        analysisType: 'comprehensive',
+        userContext: datasetContext.length > 0 ? datasetContext : null
       });
 
       console.log('Analysis result:', result.data);
@@ -287,9 +375,7 @@ const Upload: React.FC = () => {
           });
           continue;
         }
-      }
-
-      const fileId = Date.now().toString() + Math.random().toString(36);
+      }      const fileId = Date.now().toString() + Math.random().toString(36);
       const newFile: UploadedFile = {
         id: fileId,
         name: file.name,
@@ -305,10 +391,17 @@ const Upload: React.FC = () => {
       try {
         // Upload file to Firebase Storage
         const downloadURL = await uploadFileToFirebase(file, fileId);
-        // Process the dataset
-        await processDataset(fileId, downloadURL, file.name, file.size);
+        // Store file metadata in Firestore without analyzing
+        await storeFileMetadata(fileId, downloadURL, file.name, file.size);
+        
+        updateUploadedFile(fileId, { status: 'ready', downloadURL });
+        
+        toast({
+          title: 'Upload complete',
+          description: `${file.name} uploaded successfully. Ready for analysis.`
+        });
       } catch (error: any) {
-        console.error('Upload/processing error:', error);
+        console.error('Upload error:', error);
         updateUploadedFile(fileId, { status: 'error', error: error.message });
         
         toast({
@@ -347,13 +440,16 @@ const Upload: React.FC = () => {
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
-
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'complete':
         return <CheckCircle className="h-5 w-5 text-green-500" />;
+      case 'ready':
+        return <CheckCircle className="h-5 w-5 text-blue-500" />;
       case 'error':
         return <AlertCircle className="h-5 w-5 text-red-500" />;
+      case 'processing':
+        return <RefreshCw className="h-5 w-5 text-maphera-amber animate-spin" />;
       default:
         return <div className="h-5 w-5 border-2 border-maphera-blue border-t-transparent rounded-full animate-spin" />;
     }
@@ -413,10 +509,18 @@ const Upload: React.FC = () => {
                   className="bg-maphera-blue hover:bg-blue-600"
                 >
                   Browse Files
-                </Button>
-              </div>
+                </Button>              </div>
             </CardContent>
-          </Card>          {uploadedFiles.length > 0 && (
+          </Card>
+
+          {/* Dataset Context Component */}
+          <DatasetContext 
+            onContextUpdate={handleContextUpdate}
+            placeholder="Describe your dataset: type of data, collection period, geographic focus, known issues, or analysis goals..."
+            maxMessages={3}
+          />
+
+          {uploadedFiles.length > 0 && (
             <Card className="mt-6">
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -461,8 +565,7 @@ const Upload: React.FC = () => {
                         <p className="text-sm text-gray-500">
                           {formatFileSize(file.size)} • {file.uploadedAt.toLocaleTimeString()}
                         </p>
-                        
-                        {file.status === 'uploading' && (
+                          {file.status === 'uploading' && (
                           <div className="mt-2">
                             <Progress value={file.progress} className="h-2" />
                             <p className="text-xs text-gray-500 mt-1">
@@ -471,25 +574,55 @@ const Upload: React.FC = () => {
                           </div>
                         )}
                         
+                        {file.status === 'ready' && (
+                          <p className="text-xs text-blue-600 mt-1">Ready for analysis</p>
+                        )}
+                        
                         {file.status === 'processing' && (
-                          <p className="text-xs text-maphera-amber mt-1">Processing...</p>
+                          <p className="text-xs text-maphera-amber mt-1">Analyzing...</p>
                         )}
                         
                         {file.status === 'complete' && (
-                          <p className="text-xs text-green-600 mt-1">Ready for analysis</p>
+                          <p className="text-xs text-green-600 mt-1">Analysis complete</p>
                         )}
 
                         {file.status === 'error' && file.error && (
                           <p className="text-xs text-red-600 mt-1">Error: {file.error}</p>
                         )}
                       </div>
-                      
-                      <div className="flex items-center space-x-2">
+                        <div className="flex items-center space-x-2">
                         <div className="flex-shrink-0">
                           {getStatusIcon(file.status)}
                         </div>
                         
-                        {(file.status === 'complete' || file.status === 'error') && (
+                        {/* Analyze button for ready files */}
+                        {file.status === 'ready' && (
+                          <Button
+                            onClick={() => analyzeDataset(file.id, file.name)}
+                            size="sm"
+                            className="bg-green-600 hover:bg-green-700 text-white"
+                          >
+                            <RefreshCw className="h-4 w-4 mr-1" />
+                            Analyze
+                          </Button>
+                        )}
+                        
+                        {/* View results button for completed analyses */}
+                        {file.status === 'complete' && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              // Navigate to map view with this dataset
+                              window.location.href = `/map?dataset=${file.id}`;
+                            }}
+                            className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                          >
+                            View Results
+                          </Button>
+                        )}
+                        
+                        {(file.status === 'complete' || file.status === 'error' || file.status === 'ready') && (
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
                               <Button
@@ -573,11 +706,16 @@ const Upload: React.FC = () => {
             <CardHeader>
               <CardTitle className="font-roboto">Quick Stats</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
+            <CardContent>              <div className="space-y-3">
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-600 font-open-sans">Total Uploads</span>
                   <span className="font-medium">{uploadedFiles.length}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-600 font-open-sans">Ready to Analyze</span>
+                  <span className="font-medium text-blue-600">
+                    {uploadedFiles.filter(f => f.status === 'ready').length}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-600 font-open-sans">Completed</span>
@@ -586,7 +724,7 @@ const Upload: React.FC = () => {
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm text-gray-600 font-open-sans">Processing</span>
+                  <span className="text-sm text-gray-600 font-open-sans">Analyzing</span>
                   <span className="font-medium text-maphera-amber">
                     {uploadedFiles.filter(f => f.status === 'processing').length}
                   </span>

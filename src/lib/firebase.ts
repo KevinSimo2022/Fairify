@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, connectAuthEmulator, GoogleAuthProvider, browserLocalPersistence, setPersistence } from 'firebase/auth';
+import { getAuth, connectAuthEmulator, GoogleAuthProvider } from 'firebase/auth';
 import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
 import { getStorage, connectStorageEmulator } from 'firebase/storage';
 import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
@@ -23,79 +23,16 @@ export const db = getFirestore(app);
 export const storage = getStorage(app);
 export const functions = getFunctions(app);
 
-// Initialize Google Auth Provider
 export const googleProvider = new GoogleAuthProvider();
-googleProvider.addScope('email');
-googleProvider.addScope('profile');
-
-// Set Firebase Auth persistence to local storage
-setPersistence(auth, browserLocalPersistence).catch((error) => {
-  console.error('Error setting Firebase Auth persistence:', error);
+googleProvider.setCustomParameters({
+  prompt: 'select_account'
 });
 
-// Connect to emulators only if explicitly enabled
-const shouldUseEmulators = import.meta.env.VITE_USE_EMULATORS === 'true';
-
-console.log('🔧 Firebase Configuration Debug:');
-console.log('- VITE_USE_EMULATORS:', import.meta.env.VITE_USE_EMULATORS);
-console.log('- shouldUseEmulators:', shouldUseEmulators);
-console.log('- Firebase Project ID:', import.meta.env.VITE_FIREBASE_PROJECT_ID);
-console.log('- Environment:', import.meta.env.MODE);
-
-if (shouldUseEmulators) {
-  let authConnected = false;
-  let firestoreConnected = false;
-  let storageConnected = false;
-  let functionsConnected = false;
-
-  try {
-    // Auth emulator
-    if (!authConnected) {
-      connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true });
-      authConnected = true;
-      console.log('✅ Connected to Auth emulator');
-    }
-  } catch (error) {
-    console.log('⚠️ Auth emulator connection skipped:', error.message);
-  }
-  
-  try {
-    // Firestore emulator
-    if (!firestoreConnected) {
-      connectFirestoreEmulator(db, 'localhost', 8080);
-      firestoreConnected = true;
-      console.log('✅ Connected to Firestore emulator');
-    }
-  } catch (error) {
-    console.log('⚠️ Firestore emulator connection skipped:', error.message);
-  }
-  
-  try {
-    // Storage emulator
-    if (!storageConnected) {
-      connectStorageEmulator(storage, 'localhost', 9199);
-      storageConnected = true;
-      console.log('✅ Connected to Storage emulator');
-    }
-  } catch (error) {
-    console.log('⚠️ Storage emulator connection skipped:', error.message);
-  }
-  
-  try {
-    // Functions emulator
-    if (!functionsConnected) {
-      connectFunctionsEmulator(functions, 'localhost', 5001);
-      functionsConnected = true;
-      console.log('✅ Connected to Functions emulator');
-    }
-  } catch (error) {
-    console.log('⚠️ Functions emulator connection skipped:', error.message);
-  }
-
-  console.log('🔧 Firebase emulator configuration complete');
-} else {
-  console.log('🌐 Using production Firebase services');
+if (import.meta.env.VITE_USE_EMULATORS === 'true') {
+  connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true });
+  connectFirestoreEmulator(db, 'localhost', 8080);
+  connectStorageEmulator(storage, 'localhost', 9199);
+  connectFunctionsEmulator(functions, 'localhost', 5001);
 }
 
 export default app;
-export { app };

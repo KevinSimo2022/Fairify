@@ -3,7 +3,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Map, Layers, Filter, Download, ZoomIn, ZoomOut, RotateCcw, RefreshCw, BarChart3 } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Map, Layers, Filter, Download, ZoomIn, ZoomOut, RotateCcw, RefreshCw, BarChart3, ChevronDown } from 'lucide-react';
 import { httpsCallable } from 'firebase/functions';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { functions, db } from '@/lib/firebase';
@@ -19,6 +20,7 @@ interface MapData {
   coverage: number;
   biasScore: number;
   giniCoefficient: number;
+  context?: string[]; // Add context field
   realDataPoints?: DataPoint[]; // Add real coordinate data
   analysisResults?: {
     bias?: {
@@ -243,13 +245,13 @@ const MapView: React.FC = () => {
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       console.log('MapView onSnapshot - Query snapshot received, size:', querySnapshot.size);
       const datasets: MapData[] = [];      querySnapshot.forEach((doc) => {        console.log('MapView onSnapshot - Document data:', doc.id, doc.data());
-        const data = doc.data();
-        const dataset = {          id: doc.id,
+        const data = doc.data();        const dataset = {          id: doc.id,
           name: data.fileName || data.name || 'Untitled Dataset',
           dataPoints: data.totalRows || 0,
           coverage: data.analysisResults?.coverage?.coveragePercentage || 0,
           biasScore: data.analysisResults?.bias?.biasScore || 0,
           giniCoefficient: data.analysisResults?.bias?.giniCoefficient || 0,
+          context: data.context || undefined, // Add context from Firestore
           analysisResults: data.analysisResults,
           realDataPoints: [], // Will be loaded separately when dataset is selected
         };
@@ -307,9 +309,7 @@ const MapView: React.FC = () => {
         dataPoints: true
       }));
     }
-  };
-
-  const handleExportMap = async () => {
+  };  const handleExportMap = async (format: 'json' | 'csv' | 'image' = 'json') => {
     if (!selectedDataset) {
       toast({
         title: 'No Dataset Selected',
@@ -319,16 +319,59 @@ const MapView: React.FC = () => {
       return;
     }
 
+    if (format === 'image') {
+      // Export map as image
+      handleExportMapImage();
+      return;
+    }
+
     try {
-      const exportMap = httpsCallable(functions, 'exportMapData');
-      const result = await exportMap({ datasetId: selectedDataset.id });
+      toast({
+        title: 'Preparing Export',
+        description: 'Generating export file...',
+      });
+
+      // Use current data points instead of calling Firebase function
+      const exportData = {
+        dataset: {
+          id: selectedDataset.id,
+          name: selectedDataset.name,
+          dataPoints: selectedDataset.dataPoints,
+          coverage: selectedDataset.coverage,
+          biasScore: selectedDataset.biasScore,
+          giniCoefficient: selectedDataset.giniCoefficient
+        },
+        coordinates: currentDataPoints.map(point => ({
+          latitude: point.lat,
+          longitude: point.lng,
+          value: point.value || 0,
+          bias: point.bias || 0,
+          category: point.category || 'unknown'
+        })),
+        statistics: liveStats,
+        exportedAt: new Date().toISOString(),
+        exportFormat: format
+      };
+      
+      let blob: Blob;
+      let fileName: string;
+      
+      if (format === 'csv') {
+        // Convert to CSV format
+        const csvData = convertToCSV(exportData);
+        blob = new Blob([csvData], { type: 'text/csv' });
+        fileName = `${selectedDataset.name}_map_data.csv`;
+      } else {
+        // JSON format
+        blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+        fileName = `${selectedDataset.name}_map_data.json`;
+      }
       
       // Create download link
-      const blob = new Blob([JSON.stringify(result.data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${selectedDataset.name}_map_export.json`;
+      a.download = fileName;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -336,7 +379,7 @@ const MapView: React.FC = () => {
 
       toast({
         title: 'Export Successful',
-        description: 'Map data has been exported',
+        description: `Map data has been exported as ${format.toUpperCase()}`,
       });
     } catch (error) {
       console.error('Export error:', error);
@@ -346,6 +389,117 @@ const MapView: React.FC = () => {
         variant: 'destructive',
       });
     }
+  };
+  const handleExportMapImage = async () => {
+    try {
+      // Get the map container
+      const mapContainer = document.querySelector('.leaflet-container') as HTMLElement;
+      if (!mapContainer) {
+        throw new Error('Map container not found');
+      }
+
+      toast({
+        title: 'Generating Map Image',
+        description: 'Please wait while we capture the map...',
+      });
+
+      // Import html2canvas dynamically
+      const html2canvas = (await import('html2canvas')).default;      // Capture the map with supported settings
+      const canvas = await html2canvas(mapContainer, {
+        useCORS: true,
+        allowTaint: true,
+        background: '#ffffff',
+        width: mapContainer.offsetWidth,
+        height: mapContainer.offsetHeight
+      });
+
+      // Add metadata overlay to the image
+      const ctx = canvas.getContext('2d');
+      if (ctx && selectedDataset) {
+        // Add title and metadata
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.fillRect(10, 10, 300, 80);
+        
+        ctx.fillStyle = '#000000';
+        ctx.font = 'bold 16px Arial';
+        ctx.fillText(`${selectedDataset.name}`, 20, 30);
+        
+        ctx.font = '12px Arial';
+        ctx.fillText(`Data Points: ${selectedDataset.dataPoints}`, 20, 50);
+        ctx.fillText(`Coverage: ${selectedDataset.coverage.toFixed(1)}%`, 20, 65);
+        ctx.fillText(`Bias Score: ${selectedDataset.biasScore.toFixed(2)}`, 20, 80);
+      }
+
+      // Convert to blob and download
+      canvas.toBlob((blob) => {
+        if (blob) {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${selectedDataset?.name || 'map'}_visualization.png`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+
+          toast({
+            title: 'Export Successful',
+            description: 'Map image has been downloaded successfully',
+          });
+        }
+      }, 'image/png', 0.95);
+    } catch (error) {
+      console.error('Image export error:', error);
+      toast({
+        title: 'Export Failed',
+        description: 'Failed to export map image. Please try again.',
+        variant: 'destructive',
+      });
+    }
+  };
+  const convertToCSV = (data: any) => {
+    if (!data.coordinates || !Array.isArray(data.coordinates)) {
+      return 'No coordinate data available';
+    }
+
+    // Create comprehensive CSV with dataset metadata and coordinates
+    const csvLines = [];
+    
+    // Add metadata header
+    csvLines.push('# Dataset Information');
+    csvLines.push(`# Name: ${data.dataset.name}`);
+    csvLines.push(`# Total Data Points: ${data.dataset.dataPoints}`);
+    csvLines.push(`# Coverage: ${data.dataset.coverage.toFixed(2)}%`);
+    csvLines.push(`# Bias Score: ${data.dataset.biasScore.toFixed(3)}`);
+    csvLines.push(`# Gini Coefficient: ${data.dataset.giniCoefficient.toFixed(3)}`);
+    csvLines.push(`# Exported: ${new Date(data.exportedAt).toLocaleString()}`);
+    csvLines.push('');
+    
+    // Add statistics header
+    csvLines.push('# Statistics');
+    csvLines.push(`# Average Value: ${data.statistics.avgValue.toFixed(2)}`);
+    csvLines.push(`# Average Bias: ${data.statistics.avgBias.toFixed(3)}`);
+    csvLines.push(`# High Bias Count: ${data.statistics.highBiasCount}`);
+    csvLines.push(`# Coverage Score: ${data.statistics.coverageScore.toFixed(1)}%`);
+    csvLines.push('');
+    
+    // Add coordinate data header
+    const headers = ['latitude', 'longitude', 'value', 'bias', 'category'];
+    csvLines.push(headers.join(','));
+
+    // Add coordinate data
+    data.coordinates.forEach((point: any) => {
+      const row = [
+        point.latitude || '',
+        point.longitude || '',
+        point.value || '',
+        point.bias || '',
+        point.category || ''
+      ];
+      csvLines.push(row.join(','));
+    });
+
+    return csvLines.join('\n');
   };
 
   const refreshData = () => {
@@ -367,16 +521,33 @@ const MapView: React.FC = () => {
           <p className="text-gray-600 font-open-sans">
             Visualize data density, coverage gaps, and bias indicators
           </p>
-        </div>
-        <div className="flex space-x-2">
+        </div>        <div className="flex space-x-2">
           <Button variant="outline" size="sm" onClick={refreshData} disabled={loading}>
             <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
-          <Button variant="outline" size="sm" onClick={handleExportMap} disabled={!selectedDataset}>
-            <Download className="h-4 w-4 mr-2" />
-            Export Map
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" disabled={!selectedDataset}>
+                <Download className="h-4 w-4 mr-2" />
+                Export Map
+                <ChevronDown className="h-4 w-4 ml-2" />
+              </Button>
+            </DropdownMenuTrigger>            <DropdownMenuContent>
+              <DropdownMenuItem onClick={() => handleExportMap('image')}>
+                <Download className="h-4 w-4 mr-2" />
+                Export Map as PNG
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExportMap('json')}>
+                <Download className="h-4 w-4 mr-2" />
+                Export Data as JSON
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExportMap('csv')}>
+                <Download className="h-4 w-4 mr-2" />
+                Export Data as CSV
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button className="bg-maphera-blue hover:bg-blue-600" size="sm">
             <Filter className="h-4 w-4 mr-2" />
             Filters
@@ -414,7 +585,7 @@ const MapView: React.FC = () => {
         </Card>
       )}      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <div className="lg:col-span-3">
-          <Card className="h-[600px]">
+          <Card className="h-[600px] relative z-0">
             <CardHeader className="pb-3">
               <div className="flex justify-between items-center">
                 <CardTitle className="font-roboto">
@@ -580,7 +751,7 @@ const MapView: React.FC = () => {
         </div>      </div>
 
       {/* Stats and AI Analysis Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6 items-start">
         {/* Quick Stats */}
         <Card className="shadow-sm border-0 bg-white/80 backdrop-blur-sm">
           <CardHeader className="pb-3">
@@ -663,14 +834,14 @@ const MapView: React.FC = () => {
               </div>
             )}
           </CardContent>
-        </Card>
-
-        {/* AI Analysis */}
+        </Card>        {/* AI Analysis */}
         <AIAnalysis 
           dataPoints={currentDataPoints}
           datasetName={selectedDataset?.name || 'No Dataset Selected'}
+          userContext={selectedDataset?.context}
           liveStats={liveStats}
-        />      </div>
+          className="lg:col-span-2"
+        /></div>
     </div>
   );
 };
