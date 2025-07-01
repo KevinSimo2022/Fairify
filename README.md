@@ -1,5 +1,7 @@
 # Fairify - Geospatial Bias Analysis Platform
 
+🌐 **Live Demo**: https://profound-lokum-a8784e.netlify.app/
+
 Github Repo Link:
 https://github.com/KevinSimo2022/Fairify
 
@@ -21,7 +23,7 @@ Fairify is a comprehensive platform for analyzing bias in geospatial datasets, w
 - **🤖 AI-Powered Insights**: Automated bias detection using Google Gemini AI
 - **📈 Real-time Analytics**: Live statistics and monitoring dashboards
 - **📱 Responsive Design**: Works seamlessly across desktop and mobile devices
-- **🌍 Multi-Country Support**: Support for Kenya, Rwanda, Cameroon, and South Africa
+- **🌍 Multi-Country Support**: Support for Kenya, Rwanda, and Cameroon
 
 ## 🗺️ Supported Countries & Regions
 
@@ -37,10 +39,6 @@ Fairify is a comprehensive platform for analyzing bias in geospatial datasets, w
 ### Cameroon
 - 10 regions with population mapping
 - Regional bias analysis capabilities
-
-### South Africa
-- Major provinces including Western Cape, Gauteng, KwaZulu-Natal
-- Provincial-level analysis support
 
 ## 🏗️ Architecture
 
