@@ -1,0 +1,7 @@
+[
+  {
+    "origin": ["http://localhost:3000", "https://profound-lokum-a8784e.netlify.app/"],
+    "method": ["GET"],
+    "maxAgeSeconds": 3600
+  }
+]

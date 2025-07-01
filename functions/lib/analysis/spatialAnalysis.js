@@ -133,7 +133,7 @@ function getKenyaBoundaries() {
                 properties: { name: 'Nairobi', code: 'NRB', population: 4397073 },
                 geometry: {
                     type: 'Polygon',
-                    coordinates: [[[36.6444, -1.444], [37.1068, -1.444], [37.1068, -1.163], [36.6444, -1.163], [36.6444, -1.444]]]
+                    coordinates: [[[36.6, -1.5], [37.2, -1.5], [37.2, -1.1], [36.6, -1.1], [36.6, -1.5]]]
                 }
             },
             {
@@ -141,7 +141,7 @@ function getKenyaBoundaries() {
                 properties: { name: 'Central', code: 'CEN', population: 4383743 },
                 geometry: {
                     type: 'Polygon',
-                    coordinates: [[[36.2, -1.3], [37.5, -1.3], [37.5, 0.2], [36.2, 0.2], [36.2, -1.3]]]
+                    coordinates: [[[36.0, -1.5], [37.8, -1.5], [37.8, 0.5], [36.0, 0.5], [36.0, -1.5]]]
                 }
             },
             {
@@ -149,7 +149,7 @@ function getKenyaBoundaries() {
                 properties: { name: 'Coast', code: 'CST', population: 3325307 },
                 geometry: {
                     type: 'Polygon',
-                    coordinates: [[[38.5, -4.8], [41.9, -4.8], [41.9, -1.0], [38.5, -1.0], [38.5, -4.8]]]
+                    coordinates: [[[38.0, -5.0], [42.0, -5.0], [42.0, -1.0], [38.0, -1.0], [38.0, -5.0]]]
                 }
             },
             {
@@ -157,7 +157,7 @@ function getKenyaBoundaries() {
                 properties: { name: 'Eastern', code: 'EST', population: 5668123 },
                 geometry: {
                     type: 'Polygon',
-                    coordinates: [[[37.0, -3.0], [40.0, -3.0], [40.0, 1.0], [37.0, 1.0], [37.0, -3.0]]]
+                    coordinates: [[[37.0, -4.0], [40.5, -4.0], [40.5, 1.5], [37.0, 1.5], [37.0, -4.0]]]
                 }
             },
             {
@@ -165,7 +165,7 @@ function getKenyaBoundaries() {
                 properties: { name: 'North Eastern', code: 'NE', population: 2310757 },
                 geometry: {
                     type: 'Polygon',
-                    coordinates: [[[38.5, 2.0], [42.0, 2.0], [42.0, 5.0], [38.5, 5.0], [38.5, 2.0]]]
+                    coordinates: [[[38.0, 1.0], [42.0, 1.0], [42.0, 5.0], [38.0, 5.0], [38.0, 1.0]]]
                 }
             },
             {
@@ -173,7 +173,7 @@ function getKenyaBoundaries() {
                 properties: { name: 'Nyanza', code: 'NYZ', population: 5442711 },
                 geometry: {
                     type: 'Polygon',
-                    coordinates: [[[33.8, -1.8], [35.5, -1.8], [35.5, 0.5], [33.8, 0.5], [33.8, -1.8]]]
+                    coordinates: [[[33.8, -2.0], [35.5, -2.0], [35.5, 0.8], [33.8, 0.8], [33.8, -2.0]]]
                 }
             },
             {
@@ -181,7 +181,7 @@ function getKenyaBoundaries() {
                 properties: { name: 'Rift Valley', code: 'RV', population: 10006805 },
                 geometry: {
                     type: 'Polygon',
-                    coordinates: [[[34.0, -2.5], [37.5, -2.5], [37.5, 3.5], [34.0, 3.5], [34.0, -2.5]]]
+                    coordinates: [[[34.0, -3.0], [37.5, -3.0], [37.5, 4.0], [34.0, 4.0], [34.0, -3.0]]]
                 }
             },
             {
@@ -189,7 +189,7 @@ function getKenyaBoundaries() {
                 properties: { name: 'Western', code: 'WST', population: 4334282 },
                 geometry: {
                     type: 'Polygon',
-                    coordinates: [[[33.5, -1.0], [35.5, -1.0], [35.5, 1.5], [33.5, 1.5], [33.5, -1.0]]]
+                    coordinates: [[[33.5, -1.5], [35.8, -1.5], [35.8, 1.8], [33.5, 1.8], [33.5, -1.5]]]
                 }
             }
         ]
@@ -287,7 +287,39 @@ function detectCountryFromCoordinates(dataPoints) {
         console.warn('No data points provided for country detection.');
         return 'unknown';
     }
-    console.log('Mapping all locations without country limits.');
+    
+    const lats = dataPoints.map(p => p.lat);
+    const lngs = dataPoints.map(p => p.lng);
+    
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+    const minLng = Math.min(...lngs);
+    const maxLng = Math.max(...lngs);
+    
+    console.log('Coordinate bounds:', { minLat, maxLat, minLng, maxLng });
+    
+    // Kenya bounds: approximately -5.5°S to 5.5°N, 33.5°E to 42.5°E (expanded to be more inclusive)
+    if (minLat >= -5.5 && maxLat <= 5.5 && minLng >= 33.5 && maxLng <= 42.5) {
+        console.log('Detected country: Kenya');
+        return 'kenya';
+    }
+    // Rwanda bounds: approximately -3°S to -1°S, 28.8°E to 31.2°E
+    if (minLat >= -3 && maxLat <= -1 && minLng >= 28.8 && maxLng <= 31.2) {
+        console.log('Detected country: Rwanda');
+        return 'rwanda';
+    }
+    // Cameroon bounds: approximately 1.5°N to 13°N, 8.5°E to 16.5°E
+    if (minLat >= 1.5 && maxLat <= 13 && minLng >= 8.5 && maxLng <= 16.5) {
+        console.log('Detected country: Cameroon');
+        return 'cameroon';
+    }
+    // South Africa bounds: approximately -35°S to -22°S, 16°E to 33°E
+    if (minLat >= -35 && maxLat <= -22 && minLng >= 16 && maxLng <= 33) {
+        console.log('Detected country: South Africa');
+        return 'south-africa';
+    }
+    
+    console.log('Country detection failed - coordinates outside known bounds');
     return 'unknown';
 }
 exports.detectCountryFromCoordinates = detectCountryFromCoordinates;

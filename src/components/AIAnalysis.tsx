@@ -42,9 +42,12 @@ interface AIAnalysisProps {
     coverageScore: number;
   };
   className?: string;
+  allRegionNames?: string[];
+  regionsWithNoData?: string[];
+  highImportanceRegions?: string[];
 }
 
-const AIAnalysis: React.FC<AIAnalysisProps> = ({ dataPoints, datasetName, userContext, liveStats, className }) => {
+const AIAnalysis: React.FC<AIAnalysisProps> = ({ dataPoints, datasetName, userContext, liveStats, className, allRegionNames, regionsWithNoData, highImportanceRegions }) => {
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -197,9 +200,9 @@ const AIAnalysis: React.FC<AIAnalysisProps> = ({ dataPoints, datasetName, userCo
           }
         ],
         recommendations: [
-          `TARGET SAMPLING: Add ${Math.ceil(dataPoints.length * 0.4)} points in ${geographicalAnalysis.primaryRegion === 'Kenya' ? 'Northern Kenya arid zones' : geographicalAnalysis.primaryRegion === 'South Africa' ? 'Eastern Cape rural areas' : 'remote regions'} using mobile teams.`,
-          `STRONG COVERAGE: ${geographicalAnalysis.primaryRegion === 'Kenya' ? 'Central Kenya (' + Math.floor(dataPoints.length * 0.3) + ' points) covers 60% population, critical for food security policy' : geographicalAnalysis.primaryRegion === 'South Africa' ? 'Western Cape shows good coverage, essential for 40% agricultural exports' : 'Urban centers well-covered, important for population impact assessment'}.`,
-          `IMPROVE ACCESS: Deploy community monitors in ${geographicalAnalysis.primaryRegion === 'Kenya' ? 'Northern pastoral areas' : geographicalAnalysis.primaryRegion === 'South Africa' ? 'Eastern Cape communities' : 'remote regions'}. Target <0.3 bias, +45% rural representation.`
+          `TARGET SAMPLING: Add ${Math.ceil(dataPoints.length * 0.4)} points in ${geographicalAnalysis.primaryRegion === 'Kenya' ? 'Northern Kenya arid zones' : 'remote regions'} using mobile teams.`,
+          `STRONG COVERAGE: ${geographicalAnalysis.primaryRegion === 'Kenya' ? 'Central Kenya (' + Math.floor(dataPoints.length * 0.3) + ' points) covers 60% population, critical for food security policy' : 'Urban centers well-covered, important for population impact assessment'}.`,
+          `IMPROVE ACCESS: Deploy community monitors in ${geographicalAnalysis.primaryRegion === 'Kenya' ? 'Northern pastoral areas' : 'remote regions'}. Target <0.3 bias, +45% rural representation.`
         ]
       });
     } finally {
@@ -294,17 +297,12 @@ const AIAnalysis: React.FC<AIAnalysisProps> = ({ dataPoints, datasetName, userCo
       primaryRegion = 'Kenya';
       majorCities = ['Nairobi', 'Mombasa', 'Kisumu', 'Nakuru', 'Eldoret'];
     }
-    // South Africa boundaries: approximately -34.8 to -22.1 latitude, 16.5 to 32.9 longitude
-    else if (latMin >= -34.8 && latMax <= -22.1 && lngMin >= 16.5 && lngMax <= 32.9) {
-      primaryRegion = 'South Africa';
-      majorCities = ['Cape Town', 'Johannesburg', 'Durban', 'Pretoria', 'Port Elizabeth'];
-    }
     // Add more regions as needed
     else if (latMin >= -90 && latMax <= 90 && lngMin >= -180 && lngMax <= 180) {
       // Determine broader regions
       if (latMin >= -35 && latMax <= 37 && lngMin >= -18 && lngMax <= 51) {
         primaryRegion = 'Africa';
-        majorCities = ['Cairo', 'Lagos', 'Nairobi', 'Cape Town', 'Casablanca'];
+        majorCities = ['Cairo', 'Lagos', 'Nairobi', 'Casablanca'];
       } else if (latMin >= 5 && latMax <= 81 && lngMin >= -169 && lngMax <= 190) {
         primaryRegion = 'Europe/Asia';
         majorCities = ['London', 'Paris', 'Berlin', 'Moscow', 'Tokyo'];
@@ -355,12 +353,6 @@ const AIAnalysis: React.FC<AIAnalysisProps> = ({ dataPoints, datasetName, userCo
         if (lng < 36) return 'Western Kenya';
         if (lng > 39) return 'Eastern Kenya';
         return 'Central Kenya';
-      } else if (primaryRegion === 'South Africa') {
-        if (lat > -26) return 'Northern Provinces';
-        if (lat < -32) return 'Southern Cape';
-        if (lng < 22) return 'Western Cape';
-        if (lng > 28) return 'Eastern Regions';
-        return 'Central Plateau';
       } else {
         // Generic regional naming for other areas
         if (lat > 0) return 'Northern Region';
@@ -523,7 +515,6 @@ const AIAnalysis: React.FC<AIAnalysisProps> = ({ dataPoints, datasetName, userCo
               <div className="bg-gray-50 rounded-lg p-4">
                 <p className="text-sm font-open-sans leading-relaxed">{analysis.summary}</p>
               </div>
-              
               {/* Show user context if available */}
               {userContext && userContext.length > 0 && (
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">

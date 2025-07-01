@@ -36,6 +36,7 @@ interface DataPoint {
   value?: number;
   bias?: number;
   category?: string;
+  coverageBias?: number; // Added coverageBias
 }
 
 interface LayerState {
@@ -124,11 +125,11 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
 
   const displayDataPoints = dataPoints; // Always use dataPoints prop
 
-  // Color function based on bias score
-  const getColorByBias = (bias: number = 0) => {
-    if (bias > 0.6) return '#ef4444'; // red
-    if (bias > 0.3) return '#f59e0b'; // amber
-    return '#10b981'; // green
+  // Color function based on coverage bias
+  const getColorByCoverageBias = (coverageBias: number = 1) => {
+    if (coverageBias < 0.8) return '#ef4444'; // under-covered (red)
+    if (coverageBias < 1.2) return '#10b981'; // well-covered (green)
+    return '#3b82f6'; // over-covered (blue)
   };
 
   // Size function based on value
@@ -170,7 +171,7 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
             center={[point.lat, point.lng]}
             radius={getSizeByValue(point.value)}
             pathOptions={{
-              fillColor: getColorByBias(point.bias),
+              fillColor: getColorByCoverageBias(point.coverageBias),
               color: '#fff',
               weight: 2,
               opacity: 1,
@@ -184,7 +185,7 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({
               <div className="text-sm">
                 <h3 className="font-semibold mb-1">Data Point {point.id}</h3>
                 <p><strong>Value:</strong> {point.value || 'N/A'}</p>
-                <p><strong>Bias Score:</strong> {point.bias?.toFixed(2) || 'N/A'}</p>
+                <p><strong>Coverage Bias:</strong> {point.coverageBias !== undefined ? point.coverageBias.toFixed(2) : 'N/A'}</p>
                 <p><strong>Category:</strong> {point.category || 'Unknown'}</p>
                 <p><strong>Location:</strong> {point.lat.toFixed(4)}, {point.lng.toFixed(4)}</p>
               </div>

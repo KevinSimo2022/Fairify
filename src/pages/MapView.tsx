@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -12,6 +12,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import InteractiveMap from '@/components/InteractiveMap';
 import AIAnalysis from '@/components/AIAnalysis';
+import { assignDataPointsToRegions, calculateRegionalStats, annotateDataPointsWithCoverageBias, getBoundariesForCountry, detectCountryFromCoordinates, getRegionNameFromProperties } from '@/utils/spatialAnalysis';
+import type { DataPoint as BaseDataPoint } from '@/utils/spatialAnalysis';
+
+// Patch DataPoint type locally to include coverageBias for debug logging
+type DataPoint = BaseDataPoint & { coverageBias?: number };
 
 interface MapData {
   id: string;
@@ -36,15 +41,6 @@ interface MapData {
   };
 }
 
-interface DataPoint {
-  id: string;
-  lat: number;
-  lng: number;
-  value?: number;
-  bias?: number;
-  category?: string;
-}
-
 interface LayerState {
   dataDensity: boolean;
   coverageGaps: boolean;
@@ -66,7 +62,8 @@ const MapView: React.FC = () => {
     dataPoints: false, // Start with heatmap mode, not individual points
     clusterMarkers: false,
     outliers: false,
-  });// Fetch real map data for selected dataset
+  });// State for annotated data points
+  const [annotatedDataPoints, setAnnotatedDataPoints] = useState<DataPoint[]>([]);// Fetch real map data for selected dataset
   const fetchMapDataForDataset = async (datasetId: string) => {
     if (!datasetId) return;
     
@@ -133,9 +130,12 @@ const MapView: React.FC = () => {
     return [];
   };
   // Use real data points if available, otherwise generate mock data
-  const currentDataPoints = selectedDataset?.realDataPoints && selectedDataset.realDataPoints.length > 0 
-    ? selectedDataset.realDataPoints 
-    : (selectedDataset ? generateMockDataPoints(selectedDataset) : []);
+  const currentDataPoints = useMemo(() => {
+    if (selectedDataset?.realDataPoints && selectedDataset.realDataPoints.length > 0) {
+      return selectedDataset.realDataPoints;
+    }
+    return selectedDataset ? generateMockDataPoints(selectedDataset) : [];
+  }, [selectedDataset]);
   // Calculate real-time statistics from actual data points
   const calculateLiveStats = (dataPoints: DataPoint[]) => {
     if (dataPoints.length === 0) {
@@ -507,13 +507,101 @@ const MapView: React.FC = () => {
     // The onSnapshot listener will automatically refresh the data
   };
 
+  // Example: Annotate data points with coverage bias for map coloring
+  useEffect(() => {
+    async function annotatePoints() {
+      if (!currentDataPoints.length) {
+        setAnnotatedDataPoints([]);
+        return;
+      }
+      // Detect country from coordinates
+      const country = detectCountryFromCoordinates(currentDataPoints);
+      console.log('Detected country for boundaries:', country);
+      const boundaries = await getBoundariesForCountry(country as any);
+      // Log all region names in boundaries using robust extraction
+      const allRegionNames = boundaries.features.map(f => {
+        // Use the same helper as region assignment
+        return getRegionNameFromProperties(f.properties);
+      });
+      // Log the first boundary feature's properties for debugging
+      if (boundaries.features.length > 0) {
+        console.log('Sample boundary properties:', boundaries.features[0].properties);
+      }
+      console.log('All region names in boundaries:', allRegionNames);
+      const pointsWithRegion = assignDataPointsToRegions(currentDataPoints, boundaries);
+      // Ensure category always matches assigned region
+      const pointsWithRegionAndCategory = pointsWithRegion.map(p => ({ ...p, category: p.region || 'unknown' }));
+      // Debug: Log region assignment for first 10 points
+      console.log('Region assignment for first 10 points:', pointsWithRegionAndCategory.slice(0, 10).map(p => ({ id: p.id, lat: p.lat, lng: p.lng, region: p.region, category: p.category })));
+      // Log points with undefined region
+      const undefinedRegionPoints = pointsWithRegionAndCategory.filter(p => !p.region);
+      if (undefinedRegionPoints.length > 0) {
+        console.warn('Points with undefined region:', undefinedRegionPoints.map(p => ({ id: p.id, lat: p.lat, lng: p.lng })));
+      }
+      const regionalStats = calculateRegionalStats(pointsWithRegionAndCategory, boundaries);
+      // Debug: Log regional stats and populations
+      console.log('Regional stats:', regionalStats.map(r => ({ region: r.regionName, pointCount: r.pointCount, population: r.population })));
+      // Warn if any region has missing or zero population
+      regionalStats.forEach(r => {
+        if (!r.population || r.population === 0) {
+          console.warn(`Region '${r.regionName}' has missing or zero population!`);
+        }
+      });
+      // Optionally assign a fallback region or skip undefined
+      // For now, just log and proceed
+      const pointsWithCoverageBias = annotateDataPointsWithCoverageBias(pointsWithRegionAndCategory, regionalStats);
+      // Debug: Log coverage bias for first 10 points
+      console.log('Coverage bias for first 10 points:', (pointsWithCoverageBias.slice(0, 10) as any[]).map(p => ({ id: p.id, region: p.region, coverageBias: p.coverageBias })));
+      setAnnotatedDataPoints(pointsWithCoverageBias);
+    }
+    annotatePoints();
+    // Only rerun when currentDataPoints changes
+  }, [currentDataPoints]);
+
+  // --- New state for region analysis ---
+  const [allRegionNames, setAllRegionNames] = useState<string[]>([]);
+  const [regionsWithNoData, setRegionsWithNoData] = useState<string[]>([]);
+  const [highImportanceRegions, setHighImportanceRegions] = useState<string[]>([]);
+
+  // --- Update region analysis after boundaries/stats are loaded ---
+  useEffect(() => {
+    async function analyzeRegions() {
+      if (!currentDataPoints.length) {
+        setAllRegionNames([]);
+        setRegionsWithNoData([]);
+        setHighImportanceRegions([]);
+        return;
+      }
+      const country = detectCountryFromCoordinates(currentDataPoints);
+      const boundaries = await getBoundariesForCountry(country as any);
+      // Extract all region names
+      const allNames = boundaries.features.map(f => getRegionNameFromProperties(f.properties)).filter(Boolean) as string[];
+      setAllRegionNames(allNames);
+      // Calculate stats
+      const regionalStats = calculateRegionalStats(assignDataPointsToRegions(currentDataPoints, boundaries), boundaries);
+      // Regions with no data
+      const noDataRegions = regionalStats.filter(r => r.pointCount === 0).map(r => r.regionName);
+      setRegionsWithNoData(noDataRegions);
+      // High research importance regions (hardcoded for now)
+      let important: string[] = [];
+      if (country === 'cameroon') {
+        important = ['Centre', 'Littoral', 'West', 'North West', 'South West'];
+      } else if (country === 'rwanda') {
+        important = ['Kigali', 'Eastern', 'Southern', 'Northern', 'Western'];
+      }
+      setHighImportanceRegions(important);
+    }
+    analyzeRegions();
+  }, [currentDataPoints]);
+
   if (!user) {
     return (
       <div className="flex items-center justify-center h-64">
         <p className="text-gray-500">Please sign in to view the map</p>
       </div>
     );
-  }  return (
+  }
+  return (
     <div className="space-y-6 animate-fade-in pt-16">
       <div className="flex justify-between items-center">
         <div>
@@ -634,7 +722,7 @@ const MapView: React.FC = () => {
                     </div>
                   )}
                   <InteractiveMap
-                    dataPoints={currentDataPoints}
+                    dataPoints={annotatedDataPoints}
                     layers={layers}
                     selectedDataset={selectedDataset}
                     onPointClick={handlePointClick}
@@ -841,6 +929,9 @@ const MapView: React.FC = () => {
           userContext={selectedDataset?.context}
           liveStats={liveStats}
           className="lg:col-span-2"
+          allRegionNames={allRegionNames}
+          regionsWithNoData={regionsWithNoData}
+          highImportanceRegions={highImportanceRegions}
         /></div>
     </div>
   );

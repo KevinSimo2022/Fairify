@@ -5,6 +5,7 @@
 
 import { getDownloadURL, ref as storageRef } from 'firebase/storage';
 import { storage } from '@/lib/firebase';
+import { cameroonRegionPopulations, rwandaRegionPopulations, kenyaRegionPopulations } from './regionPopulations';
 
 export interface RegionalBoundary {
   type: 'Feature';
@@ -55,6 +56,25 @@ export function pointInPolygon(point: [number, number], polygon: number[][]): bo
 }
 
 /**
+ * Helper to extract region name from properties
+ */
+export function getRegionNameFromProperties(properties: Record<string, any>): string | undefined {
+  // Prioritize 'shapeName' for Cameroon, then try common keys for region names
+  return (
+    properties.shapeName ||
+    properties.name ||
+    properties.NAME_1 ||
+    properties.NAME ||
+    properties.admin1Name ||
+    properties.admin ||
+    properties.region ||
+    properties.province ||
+    properties.district ||
+    undefined
+  );
+}
+
+/**
  * Find which region a data point belongs to
  */
 export function assignPointToRegion(point: DataPoint, boundaries: BoundaryCollection): string | null {
@@ -65,7 +85,8 @@ export function assignPointToRegion(point: DataPoint, boundaries: BoundaryCollec
       // Check main polygon
       const polygon = feature.geometry.coordinates[0];
       if (pointInPolygon(coords, polygon)) {
-        return feature.properties.name;
+        // Use robust region name extraction
+        return getRegionNameFromProperties(feature.properties) || null;
       }
     }
   }
@@ -74,16 +95,18 @@ export function assignPointToRegion(point: DataPoint, boundaries: BoundaryCollec
 }
 
 /**
- * Assign all data points to their respective regions
+ * Assign all data points to their respective regions and filter out unknown regions
  */
 export function assignDataPointsToRegions(
   dataPoints: DataPoint[], 
   boundaries: BoundaryCollection
 ): DataPoint[] {
-  return dataPoints.map(point => ({
-    ...point,
-    region: assignPointToRegion(point, boundaries)
-  }));
+  return dataPoints
+    .map(point => ({
+      ...point,
+      region: assignPointToRegion(point, boundaries)
+    }))
+    .filter(point => point.region !== null && point.region !== undefined);
 }
 
 /**
@@ -106,9 +129,9 @@ export function calculateRegionalStats(
 ): RegionalStats[] {
   const regionalData: { [region: string]: DataPoint[] } = {};
   
-  // Group points by region
+  // Group points by region, only including points with valid regions
   dataPoints.forEach(point => {
-    if (point.region) {
+    if (point.region && point.region !== null && point.region !== undefined) {
       if (!regionalData[point.region]) {
         regionalData[point.region] = [];
       }
@@ -116,36 +139,41 @@ export function calculateRegionalStats(
     }
   });
 
-  // Calculate statistics for each region
+  // Calculate statistics for each region that has data points
   const stats: RegionalStats[] = [];
   
   boundaries.features.forEach(boundary => {
-    const regionName = boundary.properties.name;
-    const regionPoints = regionalData[regionName] || [];
-    const population = boundary.properties.population;
+    // Use robust region name extraction
+    const regionName = getRegionNameFromProperties(boundary.properties);
+    const regionPoints = regionName ? (regionalData[regionName] || []) : [];
+    
+    // Only include regions that have at least one data point
+    if (regionPoints.length > 0) {
+      const population = boundary.properties.population;
 
-    // Calculate averages
-    const totalValue = regionPoints.reduce((sum, p) => sum + (p.value || 0), 0);
-    const totalBias = regionPoints.reduce((sum, p) => sum + (p.bias || 0), 0);
-    const averageValue = regionPoints.length > 0 ? totalValue / regionPoints.length : 0;
-    const averageBias = regionPoints.length > 0 ? totalBias / regionPoints.length : 0;
+      // Calculate averages
+      const totalValue = regionPoints.reduce((sum, p) => sum + (p.value || 0), 0);
+      const totalBias = regionPoints.reduce((sum, p) => sum + (p.bias || 0), 0);
+      const averageValue = regionPoints.length > 0 ? totalValue / regionPoints.length : 0;
+      const averageBias = regionPoints.length > 0 ? totalBias / regionPoints.length : 0;
 
-    // Calculate Gini coefficient for the region
-    const giniCoefficient = calculateGiniCoefficient(regionPoints.map(p => p.value || 0));
+      // Calculate Gini coefficient for the region
+      const giniCoefficient = calculateGiniCoefficient(regionPoints.map(p => p.value || 0));
 
-    // Calculate coverage (simplified as point density)
-    const coverage = regionPoints.length > 0 ? Math.min(100, regionPoints.length * 10) : 0;
+      // Calculate coverage (simplified as point density)
+      const coverage = regionPoints.length > 0 ? Math.min(100, regionPoints.length * 10) : 0;
 
-    stats.push({
-      regionName,
-      pointCount: regionPoints.length,
-      coverage,
-      averageValue,
-      averageBias,
-      giniCoefficient,
-      population,
-      dataPointsPerCapita: population ? regionPoints.length / population * 100000 : undefined
-    });
+      stats.push({
+        regionName: regionName || 'Unknown',
+        pointCount: regionPoints.length,
+        coverage,
+        averageValue,
+        averageBias,
+        giniCoefficient,
+        population,
+        dataPointsPerCapita: population ? regionPoints.length / population * 100000 : undefined
+      });
+    }
   });
 
   return stats;
@@ -184,12 +212,38 @@ export function calculateCoverageRatio(regionalStats: RegionalStats[]): { [regio
 
   const coverageRatio: { [region: string]: number } = {};
 
+  console.log('Coverage calculation debug:', {
+    totalPoints,
+    totalPopulation,
+    regionalStats: regionalStats.map(s => ({
+      name: s.regionName,
+      points: s.pointCount,
+      population: s.population
+    }))
+  });
+
   regionalStats.forEach(stat => {
-    if (totalPoints > 0 && totalPopulation > 0 && stat.population) {
+    if (totalPoints > 0 && totalPopulation > 0 && stat.population && stat.population > 0) {
       const expectedRatio = stat.population / totalPopulation;
       const actualRatio = stat.pointCount / totalPoints;
-      coverageRatio[stat.regionName] = actualRatio / expectedRatio;
+      const ratio = actualRatio / expectedRatio;
+      
+      console.log(`Coverage ratio for ${stat.regionName}:`, {
+        points: stat.pointCount,
+        population: stat.population,
+        expectedRatio: expectedRatio.toFixed(4),
+        actualRatio: actualRatio.toFixed(4),
+        ratio: ratio.toFixed(4)
+      });
+      
+      coverageRatio[stat.regionName] = ratio;
     } else {
+      console.log(`Zero coverage for ${stat.regionName}:`, {
+        totalPoints,
+        totalPopulation,
+        statPopulation: stat.population,
+        pointCount: stat.pointCount
+      });
       coverageRatio[stat.regionName] = 0;
     }
   });
@@ -200,29 +254,79 @@ export function calculateCoverageRatio(regionalStats: RegionalStats[]): { [regio
 /**
  * Get default boundaries based on country
  */
-export async function getBoundariesForCountry(country: 'kenya' | 'south-africa' | 'rwanda' | 'cameroon'): Promise<BoundaryCollection> {
-  // Try to fetch real boundaries from Firebase Storage
-  let url = '';
+export async function getBoundariesForCountry(
+  country: 'kenya' | 'rwanda' | 'cameroon'
+): Promise<BoundaryCollection> {
+  let filename = '';
+
   if (country === 'kenya') {
-    url = 'gs://fairify-94f39.firebasestorage.app/region-boundaries/geoBoundaries-RWA-ADM1.geojson';
+    filename = 'geoBoundaries-KEN-ADM1.geojson';
   } else if (country === 'rwanda') {
-    url = 'gs://fairify-94f39.firebasestorage.app/region-boundaries/geoBoundaries-KEN-ADM1.geojson';
+    filename = 'geoBoundaries-RWA-ADM1.geojson';
   } else if (country === 'cameroon') {
-    url = 'gs://fairify-94f39.firebasestorage.app/region-boundaries/geoBoundaries-CMR-ADM1.geojson';
+    filename = 'geoBoundaries-CMR-ADM1.geojson';
   }
 
-  if (url) {
+  if (filename) {
     try {
-      // Convert gs:// to https:// download URL
-      const fileRef = storageRef(storage, url.replace('gs://fairify-94f39.firebasestorage.app/', 'region-boundaries/'));
+      const fileRef = storageRef(storage, `region-boundaries/${filename}`);
       const downloadUrl = await getDownloadURL(fileRef);
       const response = await fetch(downloadUrl);
       if (response.ok) {
         const geojson = await response.json();
-        // Ensure the structure matches BoundaryCollection
         if (geojson.type === 'FeatureCollection') {
+          // Inject population for Cameroon, Rwanda, or Kenya if missing
+          if (country === 'cameroon') {
+            geojson.features = geojson.features.map((feature: any) => {
+              const regionName = feature.properties?.shapeName;
+              const population = cameroonRegionPopulations[regionName] || 0;
+              if (!population) {
+                console.warn(`Missing population for region: ${regionName}`);
+              }
+              return {
+                ...feature,
+                properties: {
+                  ...feature.properties,
+                  population,
+                },
+              };
+            });
+          } else if (country === 'rwanda') {
+            geojson.features = geojson.features.map((feature: any) => {
+              // Try all possible keys for region name
+              const regionName = feature.properties?.shapeName || feature.properties?.name || feature.properties?.NAME_1;
+              const population = rwandaRegionPopulations[regionName] || 0;
+              if (!population) {
+                console.warn(`Missing population for region: ${regionName}`);
+              }
+              return {
+                ...feature,
+                properties: {
+                  ...feature.properties,
+                  population,
+                },
+              };
+            });
+          } else if (country === 'kenya') {
+            geojson.features = geojson.features.map((feature: any) => {
+              const regionName = feature.properties?.shapeName || feature.properties?.name || feature.properties?.NAME_1;
+              const population = kenyaRegionPopulations[regionName] || 0;
+              if (!population) {
+                console.warn(`Missing population for region: ${regionName}`);
+              }
+              return {
+                ...feature,
+                properties: {
+                  ...feature.properties,
+                  population,
+                },
+              };
+            });
+          }
           return geojson as BoundaryCollection;
         }
+      } else {
+        console.warn(`GeoJSON fetch failed: ${response.status} ${response.statusText}`);
       }
     } catch (e) {
       console.warn('Failed to fetch real boundaries for', country, e);
@@ -239,7 +343,7 @@ export async function getBoundariesForCountry(country: 'kenya' | 'south-africa' 
           properties: { name: 'Nairobi', code: 'NRB', population: 4397073 },
           geometry: {
             type: 'Polygon',
-            coordinates: [[[36.6444, -1.444], [37.1068, -1.444], [37.1068, -1.163], [36.6444, -1.163], [36.6444, -1.444]]]
+            coordinates: [[[36.6, -1.5], [37.2, -1.5], [37.2, -1.1], [36.6, -1.1], [36.6, -1.5]]]
           }
         },
         {
@@ -247,7 +351,7 @@ export async function getBoundariesForCountry(country: 'kenya' | 'south-africa' 
           properties: { name: 'Central', code: 'CEN', population: 4383743 },
           geometry: {
             type: 'Polygon',
-            coordinates: [[[36.2, -1.3], [37.5, -1.3], [37.5, 0.2], [36.2, 0.2], [36.2, -1.3]]]
+            coordinates: [[[36.0, -1.5], [37.8, -1.5], [37.8, 0.5], [36.0, 0.5], [36.0, -1.5]]]
           }
         },
         {
@@ -255,7 +359,7 @@ export async function getBoundariesForCountry(country: 'kenya' | 'south-africa' 
           properties: { name: 'Coast', code: 'CST', population: 3325307 },
           geometry: {
             type: 'Polygon',
-            coordinates: [[[38.5, -4.8], [41.9, -4.8], [41.9, -1.0], [38.5, -1.0], [38.5, -4.8]]]
+            coordinates: [[[38.0, -5.0], [42.0, -5.0], [42.0, -1.0], [38.0, -1.0], [38.0, -5.0]]]
           }
         },
         {
@@ -263,7 +367,23 @@ export async function getBoundariesForCountry(country: 'kenya' | 'south-africa' 
           properties: { name: 'Eastern', code: 'EST', population: 5668123 },
           geometry: {
             type: 'Polygon',
-            coordinates: [[[37.0, -3.0], [40.0, -3.0], [40.0, 1.0], [37.0, 1.0], [37.0, -3.0]]]
+            coordinates: [[[37.0, -4.0], [40.5, -4.0], [40.5, 1.5], [37.0, 1.5], [37.0, -4.0]]]
+          }
+        },
+        {
+          type: 'Feature',
+          properties: { name: 'North Eastern', code: 'NE', population: 2310757 },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [[[38.0, 1.0], [42.0, 1.0], [42.0, 5.0], [38.0, 5.0], [38.0, 1.0]]]
+          }
+        },
+        {
+          type: 'Feature',
+          properties: { name: 'Nyanza', code: 'NYZ', population: 5442711 },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [[[33.8, -2.0], [35.5, -2.0], [35.5, 0.8], [33.8, 0.8], [33.8, -2.0]]]
           }
         },
         {
@@ -271,7 +391,15 @@ export async function getBoundariesForCountry(country: 'kenya' | 'south-africa' 
           properties: { name: 'Rift Valley', code: 'RV', population: 10006805 },
           geometry: {
             type: 'Polygon',
-            coordinates: [[[34.0, -2.5], [37.5, -2.5], [37.5, 3.5], [34.0, 3.5], [34.0, -2.5]]]
+            coordinates: [[[34.0, -3.0], [37.5, -3.0], [37.5, 4.0], [34.0, 4.0], [34.0, -3.0]]]
+          }
+        },
+        {
+          type: 'Feature',
+          properties: { name: 'Western', code: 'WST', population: 4334282 },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [[[33.5, -1.5], [35.8, -1.5], [35.8, 1.8], [33.5, 1.8], [33.5, -1.5]]]
           }
         }
       ]
@@ -323,7 +451,7 @@ export async function getBoundariesForCountry(country: 'kenya' | 'south-africa' 
         }
       ]
     };
-  } else if (country === 'cameroon') {
+  } else {
     // Cameroon: 10 regions (bounding boxes are rough and for demo only)
     return {
       type: 'FeatureCollection',
@@ -410,59 +538,13 @@ export async function getBoundariesForCountry(country: 'kenya' | 'south-africa' 
         }
       ]
     };
-  } else {
-    return {
-      type: 'FeatureCollection',
-      features: [
-        {
-          type: 'Feature',
-          properties: { name: 'Western Cape', code: 'WC', population: 6621126 },
-          geometry: {
-            type: 'Polygon',
-            coordinates: [[[17.5, -34.8], [23.0, -34.8], [23.0, -31.0], [17.5, -31.0], [17.5, -34.8]]]
-          }
-        },
-        {
-          type: 'Feature',
-          properties: { name: 'Gauteng', code: 'GP', population: 15176115 },
-          geometry: {
-            type: 'Polygon',
-            coordinates: [[[27.0, -26.5], [29.0, -26.5], [29.0, -25.0], [27.0, -25.0], [27.0, -26.5]]]
-          }
-        },
-        {
-          type: 'Feature',
-          properties: { name: 'KwaZulu-Natal', code: 'KZN', population: 11289086 },
-          geometry: {
-            type: 'Polygon',
-            coordinates: [[[28.5, -31.5], [32.9, -31.5], [32.9, -26.5], [28.5, -26.5], [28.5, -31.5]]]
-          }
-        },
-        {
-          type: 'Feature',
-          properties: { name: 'Eastern Cape', code: 'EC', population: 6734001 },
-          geometry: {
-            type: 'Polygon',
-            coordinates: [[[22.5, -33.8], [30.0, -33.8], [30.0, -30.5], [22.5, -30.5], [22.5, -33.8]]]
-          }
-        },
-        {
-          type: 'Feature',
-          properties: { name: 'Limpopo', code: 'LIM', population: 5982584 },
-          geometry: {
-            type: 'Polygon',
-            coordinates: [[[26.0, -25.0], [31.5, -25.0], [31.5, -22.0], [26.0, -22.0], [26.0, -25.0]]]
-          }
-        }
-      ]
-    };
   }
 }
 
 /**
  * Detect country from data points based on coordinate bounds
  */
-export function detectCountryFromCoordinates(dataPoints: DataPoint[]): 'kenya' | 'south-africa' | 'unknown' {
+export function detectCountryFromCoordinates(dataPoints: DataPoint[]): 'kenya' | 'rwanda' | 'cameroon' | 'unknown' {
   if (dataPoints.length === 0) return 'unknown';
 
   const lats = dataPoints.map(p => p.lat);
@@ -473,29 +555,46 @@ export function detectCountryFromCoordinates(dataPoints: DataPoint[]): 'kenya' |
   const minLng = Math.min(...lngs);
   const maxLng = Math.max(...lngs);
 
-  // Kenya bounds: approximately -5°S to 5°N, 34°E to 42°E
-  if (minLat >= -5 && maxLat <= 5 && minLng >= 34 && maxLng <= 42) {
+  // Kenya bounds: approximately -5°S to 5.5°N, 33.5°E to 42.5°E (expanded to be more inclusive)
+  if (minLat >= -5.5 && maxLat <= 5.5 && minLng >= 33.5 && maxLng <= 42.5) {
     return 'kenya';
   }
-  
-  // South Africa bounds: approximately -35°S to -22°S, 16°E to 33°E
-  if (minLat >= -35 && maxLat <= -22 && minLng >= 16 && maxLng <= 33) {
-    return 'south-africa';
+  // Rwanda bounds: approximately -3°S to -1°S, 28.8°E to 31.2°E
+  if (minLat >= -3 && maxLat <= -1 && minLng >= 28.8 && maxLng <= 31.2) {
+    return 'rwanda';
+  }
+  // Cameroon bounds: approximately 1.5°N to 13°N, 8.5°E to 16.5°E
+  if (minLat >= 1.5 && maxLat <= 13 && minLng >= 8.5 && maxLng <= 16.5) {
+    return 'cameroon';
   }
 
   return 'unknown';
 }
 
 /**
- * Annotate data points with their region's coverage bias ratio
+ * Annotate data points with their region's coverage bias ratio and filter out unknown regions
  */
 export function annotateDataPointsWithCoverageBias(
   dataPoints: DataPoint[],
   regionalStats: RegionalStats[]
 ): DataPoint[] {
   const coverageRatio = calculateCoverageRatio(regionalStats);
-  return dataPoints.map(point => ({
-    ...point,
-    coverageBias: point.region ? coverageRatio[point.region] ?? 0 : 0
-  }));
+  
+  console.log('Coverage ratios calculated:', coverageRatio);
+  
+  return dataPoints
+    .filter(point => point.region !== null && point.region !== undefined)
+    .map(point => {
+      const bias = point.region ? coverageRatio[point.region] ?? 0 : 0;
+      
+      // Log first few points for debugging
+      if (Math.random() < 0.01) { // Log 1% of points randomly
+        console.log(`Point coverage bias: region=${point.region}, bias=${bias}`);
+      }
+      
+      return {
+        ...point,
+        coverageBias: bias
+      };
+    });
 }
