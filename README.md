@@ -28,15 +28,18 @@ Fairify is a comprehensive platform for analyzing bias in geospatial datasets, w
 ## 🗺️ Supported Countries & Regions
 
 ### Kenya
+
 - All 47 counties with accurate population data
 - Real administrative boundaries from GeoJSON
 - Coverage bias analysis based on 2019 census data
 
-### Rwanda  
+### Rwanda
+
 - 5 provinces (Eastern, Western, Northern, Southern, Kigali)
 - Administrative boundary support
 
 ### Cameroon
+
 - 10 regions with population mapping
 - Regional bias analysis capabilities
 
@@ -56,12 +59,14 @@ The platform consists of:
 ## 📊 Analysis Capabilities
 
 ### Bias Metrics
+
 - **Gini Coefficient**: Measure inequality in data distribution
 - **Coverage Ratio**: Compare actual vs expected distribution based on population
 - **Regional Statistics**: Point counts, averages, and density metrics
 - **Data Points Per Capita**: Normalize data by population for fair comparison
 
 ### Spatial Analysis
+
 - **Point-in-Polygon**: Accurate assignment of data points to administrative regions
 - **Country Detection**: Automatic detection of country from coordinate bounds
 - **Regional Filtering**: Hide data points that fall outside known boundaries
@@ -272,6 +277,7 @@ cd functions && npm run deploy   # Deploy functions only
 ## 🗃️ Data Format Requirements
 
 ### CSV Files
+
 ```csv
 id,latitude,longitude,value,category
 1,-1.286389,36.817223,100,environmental
@@ -279,12 +285,15 @@ id,latitude,longitude,value,category
 ```
 
 Required columns:
+
 - `latitude` or `lat`: Latitude coordinate
-- `longitude` or `lng` or `lon`: Longitude coordinate  
+- `longitude` or `lng` or `lon`: Longitude coordinate
 - `id`: Unique identifier (optional, will be generated if missing)
 
 ### GeoJSON Files
+
 Standard GeoJSON format with Point features:
+
 ```json
 {
   "type": "FeatureCollection",
@@ -435,16 +444,19 @@ We welcome contributions! Please follow these guidelines:
 ### Common Issues
 
 **Data points not showing on map:**
+
 - Ensure coordinates are within supported country boundaries
 - Check that CSV has proper latitude/longitude columns
 - Verify data points fall within valid coordinate ranges
 
 **Analysis failing:**
+
 - Check file size is under 50MB limit
 - Ensure file format is CSV or GeoJSON
 - Verify Firebase Functions are deployed and running
 
 **Coverage bias showing as 0:**
+
 - Ensure population data exists for detected regions
 - Check that data points are being assigned to regions correctly
 - Verify region names match between boundaries and population data
@@ -452,6 +464,7 @@ We welcome contributions! Please follow these guidelines:
 ### Debug Mode
 
 Enable debug logging by setting:
+
 ```env
 VITE_DEBUG=true
 ```

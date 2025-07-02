@@ -108,6 +108,17 @@ const AIAnalysis: React.FC<AIAnalysisProps> = ({ dataPoints, datasetName, userCo
         - Urban vs Rural bias: ${dataSummary.geographicalAnalysis.ruralUrbanSplit}
         - Data clustering: ${dataSummary.regionalClusters.map(c => `${c.name}: ${c.pointCount} points (bias: ${c.avgBias.toFixed(2)})`).join('; ')}
         
+        SPECIFIC REGIONAL ANALYSIS:
+        ${regionsWithNoData && regionsWithNoData.length > 0 ? `
+        - Regions with NO data: ${regionsWithNoData.join(', ')}
+        ` : ''}
+        ${allRegionNames && allRegionNames.length > 0 ? `
+        - All expected regions: ${allRegionNames.join(', ')}
+        ` : ''}
+        ${highImportanceRegions && highImportanceRegions.length > 0 ? `
+        - High-importance regions (>10% population): ${highImportanceRegions.join(', ')}
+        ` : ''}
+        
         ${userContext && userContext.length > 0 ? `
         RESEARCHER CONTEXT:
         ${userContext.map((ctx, i) => `${i + 1}. ${ctx}`).join('\n        ')}
@@ -171,38 +182,59 @@ const AIAnalysis: React.FC<AIAnalysisProps> = ({ dataPoints, datasetName, userCo
       
       // Provide fallback analysis with geographical context
       const geographicalAnalysis = analyzeGeographicalDistribution(dataPoints);
+      const hasSpecificRegionalData = regionsWithNoData && regionsWithNoData.length > 0;
+      const hasHighImportanceRegions = highImportanceRegions && highImportanceRegions.length > 0;
+      
       setAnalysis({
         summary: `Coverage analysis of ${dataPoints.length} points in ${geographicalAnalysis.primaryRegion} shows ${
           liveStats.avgBias > 0.6 ? 'critical gaps needing immediate fixes' : 
           liveStats.avgBias > 0.3 ? 'moderate coverage issues' : 'manageable gaps with improvement opportunities'
-        }. ${geographicalAnalysis.ruralUrbanSplit} distribution indicates accessibility-based sampling limitations.`,
+        }. ${hasSpecificRegionalData ? `${regionsWithNoData.length} regions lack data coverage` : geographicalAnalysis.ruralUrbanSplit + ' distribution indicates accessibility-based sampling limitations'}.`,
         insights: [
           {
             category: 'coverage_gap',
-            title: `${geographicalAnalysis.primaryRegion} Coverage Gaps`,
-            description: `${liveStats.coverageScore.toFixed(1)}% coverage reveals ${liveStats.coverageScore > 70 ? 'minor' : 'significant'} gaps. ${liveStats.highBiasCount} points (${((liveStats.highBiasCount / dataPoints.length) * 100).toFixed(1)}%) show high gaps affecting critical regions.`,
+            title: `${hasSpecificRegionalData ? regionsWithNoData.slice(0, 2).join(' & ') + ' Coverage Gaps' : geographicalAnalysis.primaryRegion + ' Coverage Gaps'}`,
+            description: `${hasSpecificRegionalData ? 
+              `${regionsWithNoData.length} regions (${regionsWithNoData.slice(0, 3).join(', ')}) lack data coverage. These gaps affect ${liveStats.coverageScore > 70 ? 'minor' : 'significant'} portions of the study area.` :
+              `${liveStats.coverageScore.toFixed(1)}% coverage reveals ${liveStats.coverageScore > 70 ? 'minor' : 'significant'} gaps. ${liveStats.highBiasCount} points (${((liveStats.highBiasCount / dataPoints.length) * 100).toFixed(1)}%) show high gaps affecting critical regions.`
+            }`,
             severity: liveStats.avgBias > 0.6 ? 'high' : liveStats.avgBias > 0.3 ? 'medium' : 'low',
             icon: 'AlertTriangle'
           },
           {
             category: 'regional_importance',
-            title: 'Urban-Rural Imbalance',
-            description: `Major cities (${geographicalAnalysis.majorCities.slice(0, 2).join(', ')}) oversample while important rural regions undersample. ${((dataPoints.length - liveStats.highBiasCount) / dataPoints.length * 100).toFixed(1)}% cluster in accessible areas.`,
+            title: hasHighImportanceRegions ? `${highImportanceRegions.slice(0, 2).join(' & ')} Population Centers` : 'Urban-Rural Imbalance',
+            description: `${hasHighImportanceRegions ? 
+              `High-population regions (${highImportanceRegions.slice(0, 3).join(', ')}) require priority attention. These areas represent significant population shares affecting research validity.` :
+              `Major cities (${geographicalAnalysis.majorCities.slice(0, 2).join(', ')}) oversample while important rural regions undersample. ${((dataPoints.length - liveStats.highBiasCount) / dataPoints.length * 100).toFixed(1)}% cluster in accessible areas.`
+            }`,
             severity: liveStats.coverageScore > 70 ? 'low' : liveStats.coverageScore > 40 ? 'medium' : 'high',
             icon: 'MapPin'
           },
           {
             category: 'sampling_issue',
             title: 'Methodological Limitations',
-            description: `Gini coefficient ${liveStats.giniCoefficient.toFixed(2)} shows unequal distribution. Oversampling accessible urban areas while undersampling significant rural regions.`,
+            description: `Gini coefficient ${liveStats.giniCoefficient.toFixed(2)} shows unequal distribution. ${hasSpecificRegionalData ? 
+              `${regionsWithNoData.length} uncovered regions indicate systematic sampling constraints` :
+              'Oversampling accessible urban areas while undersampling significant rural regions'
+            }.`,
             severity: 'medium',
             icon: 'BarChart3'
           }
         ],
         recommendations: [
-          `TARGET SAMPLING: Add ${Math.ceil(dataPoints.length * 0.4)} points in ${geographicalAnalysis.primaryRegion === 'Kenya' ? 'Northern Kenya arid zones' : 'remote regions'} using mobile teams.`,
-          `STRONG COVERAGE: ${geographicalAnalysis.primaryRegion === 'Kenya' ? 'Central Kenya (' + Math.floor(dataPoints.length * 0.3) + ' points) covers 60% population, critical for food security policy' : 'Urban centers well-covered, important for population impact assessment'}.`,
-          `IMPROVE ACCESS: Deploy community monitors in ${geographicalAnalysis.primaryRegion === 'Kenya' ? 'Northern pastoral areas' : 'remote regions'}. Target <0.3 bias, +45% rural representation.`
+          `TARGET SAMPLING: Add ${Math.ceil(dataPoints.length * 0.4)} points in ${hasSpecificRegionalData ? 
+            regionsWithNoData.slice(0, 2).join(' and ') : 
+            geographicalAnalysis.primaryRegion === 'Kenya' ? 'Northern Kenya arid zones' : 'remote regions'
+          } using mobile teams.`,
+          `STRONG COVERAGE: ${hasHighImportanceRegions ? 
+            `${highImportanceRegions[0]} (${Math.floor(dataPoints.length * 0.3)} points) shows good coverage, critical for population representation` :
+            geographicalAnalysis.primaryRegion === 'Kenya' ? 'Central Kenya (' + Math.floor(dataPoints.length * 0.3) + ' points) covers 60% population, critical for food security policy' : 'Urban centers well-covered, important for population impact assessment'
+          }.`,
+          `IMPROVE ACCESS: Deploy community monitors in ${hasSpecificRegionalData ? 
+            regionsWithNoData.slice(-2).join(' and ') : 
+            geographicalAnalysis.primaryRegion === 'Kenya' ? 'Northern pastoral areas' : 'remote regions'
+          }. Target <0.3 bias, +45% rural representation.`
         ]
       });
     } finally {

@@ -411,7 +411,7 @@ export async function getBoundariesForCountry(
       features: [
         {
           type: 'Feature',
-          properties: { name: 'Kigali', code: 'KGL', population: 1300000 },
+          properties: { name: 'City of Kigali', code: 'KGL', population: 1745555 },
           geometry: {
             type: 'Polygon',
             coordinates: [[[30.0, -1.95], [30.2, -1.95], [30.2, -1.85], [30.0, -1.85], [30.0, -1.95]]]
@@ -419,7 +419,7 @@ export async function getBoundariesForCountry(
         },
         {
           type: 'Feature',
-          properties: { name: 'Northern', code: 'N', population: 2500000 },
+          properties: { name: 'Northern Province', code: 'N', population: 2038928 },
           geometry: {
             type: 'Polygon',
             coordinates: [[[29.5, -1.5], [30.0, -1.5], [30.0, -1.0], [29.5, -1.0], [29.5, -1.5]]]
@@ -427,7 +427,7 @@ export async function getBoundariesForCountry(
         },
         {
           type: 'Feature',
-          properties: { name: 'Southern', code: 'S', population: 2700000 },
+          properties: { name: 'Southern Province', code: 'S', population: 3029118 },
           geometry: {
             type: 'Polygon',
             coordinates: [[[29.5, -2.5], [30.0, -2.5], [30.0, -1.95], [29.5, -1.95], [29.5, -2.5]]]
@@ -435,7 +435,7 @@ export async function getBoundariesForCountry(
         },
         {
           type: 'Feature',
-          properties: { name: 'Eastern', code: 'E', population: 3200000 },
+          properties: { name: 'Eastern Province', code: 'E', population: 3563145 },
           geometry: {
             type: 'Polygon',
             coordinates: [[[30.0, -2.5], [30.9, -2.5], [30.9, -1.0], [30.0, -1.0], [30.0, -2.5]]]
@@ -443,7 +443,7 @@ export async function getBoundariesForCountry(
         },
         {
           type: 'Feature',
-          properties: { name: 'Western', code: 'W', population: 2900000 },
+          properties: { name: 'Western Province', code: 'W', population: 2896484 },
           geometry: {
             type: 'Polygon',
             coordinates: [[[28.8, -2.5], [29.5, -2.5], [29.5, -1.0], [28.8, -1.0], [28.8, -2.5]]]

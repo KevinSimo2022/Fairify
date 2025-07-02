@@ -587,7 +587,9 @@ const MapView: React.FC = () => {
       if (country === 'cameroon') {
         important = ['Centre', 'Littoral', 'West', 'North West', 'South West'];
       } else if (country === 'rwanda') {
-        important = ['Kigali', 'Eastern', 'Southern', 'Northern', 'Western'];
+        important = ['City of Kigali', 'Eastern Province', 'Southern Province', 'Northern Province', 'Western Province'];
+      } else if (country === 'kenya') {
+        important = ['Nairobi', 'Central', 'Rift Valley', 'Eastern', 'Coast'];
       }
       setHighImportanceRegions(important);
     }
