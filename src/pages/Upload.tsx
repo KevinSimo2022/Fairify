@@ -1,15 +1,18 @@
 import React, { useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
 import { useUploadState } from '@/hooks/use-upload-state';
-import { Upload as UploadIcon, FileText, Map, CheckCircle, AlertCircle, Trash2, RefreshCw } from 'lucide-react';
+import { Upload as UploadIcon, FileText, Map, CheckCircle, AlertCircle, Trash2, RefreshCw, Shield, ShieldCheck } from 'lucide-react';
 import { httpsCallable } from 'firebase/functions';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { functions, storage } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import DatasetContext from '@/components/DatasetContext';
+import EncryptionService from '@/utils/encryption';
 import { 
   AlertDialog, 
   AlertDialogAction, 
@@ -32,9 +35,11 @@ interface UploadedFile {
   uploadedAt: Date;
   downloadURL?: string;
   error?: string;
+  originalFileEncrypted?: boolean;
 }
 
 const Upload: React.FC = () => {
+  const navigate = useNavigate();
   const [dragActive, setDragActive] = useState(false);
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
   const [deletingFileId, setDeletingFileId] = useState<string | null>(null);
@@ -110,7 +115,8 @@ const Upload: React.FC = () => {
         progress: file.status === 'analyzed' ? 100 : 0,
         uploadedAt: new Date(file.uploadedAt?.seconds * 1000 || Date.now()),
         downloadURL: file.downloadURL,
-        error: file.error
+        error: file.error,
+        originalFileEncrypted: file.originalFileEncrypted || false
       }));
       
       // Update local state with server data
@@ -225,7 +231,10 @@ const Upload: React.FC = () => {
 
       console.log('Analysis result:', result.data);
       
-      updateUploadedFile(fileId, { status: 'complete' });
+      updateUploadedFile(fileId, { 
+        status: 'complete',
+        originalFileEncrypted: (result.data as any)?.fileEncrypted || false
+      });
 
       toast({
         title: 'Analysis complete',
@@ -583,7 +592,15 @@ const Upload: React.FC = () => {
                         )}
                         
                         {file.status === 'complete' && (
-                          <p className="text-xs text-green-600 mt-1">Analysis complete</p>
+                          <div className="flex items-center space-x-2 mt-1">
+                            <p className="text-xs text-green-600">Analysis complete</p>
+                            {file.originalFileEncrypted && (
+                              <Badge variant="secondary" className="text-xs bg-green-100 text-green-800">
+                                <ShieldCheck className="h-3 w-3 mr-1" />
+                                Encrypted
+                              </Badge>
+                            )}
+                          </div>
                         )}
 
                         {file.status === 'error' && file.error && (
@@ -613,8 +630,8 @@ const Upload: React.FC = () => {
                             variant="outline"
                             size="sm"
                             onClick={() => {
-                              // Navigate to map view with this dataset
-                              window.location.href = `/map?dataset=${file.id}`;
+                              // Navigate to map view with this dataset using React Router
+                              navigate(`/map?dataset=${file.id}`);
                             }}
                             className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
                           >

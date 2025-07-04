@@ -54,6 +54,12 @@ const Dashboard: React.FC = () => {
       return dataPoints;
     } catch (error) {
       console.error('Dashboard - Error fetching map data for dataset:', error);
+      // Show user-friendly error message
+      toast({
+        title: 'Data Loading Issue',
+        description: 'Unable to load dataset details. The backend service may be temporarily unavailable.',
+        variant: 'destructive',
+      });
       return [];
     }
   };
@@ -155,11 +161,29 @@ const Dashboard: React.FC = () => {
 
   const generateDashboardData = async (dataset: any) => {
     if (!dataset || !dataset.analysisResults) {
-      setDashboardData(null);
+      console.log('Dashboard - No dataset or analysis results available');
+      // Create basic dashboard data even without analysis results
+      const basicDashboardData = {
+        overview: {
+          totalDataPoints: dataset.totalRows || 0,
+          overallCoverage: 0,
+          biasScore: 0,
+          giniCoefficient: 0,
+          datasetName: dataset.name || dataset.fileName || 'Untitled Dataset',
+          lastUpdated: formatTimestamp(dataset.uploadedAt || dataset.analyzedAt),
+          fileType: dataset.fileType || 'unknown',
+          fileSize: dataset.fileSize || 0
+        },
+        coverageProgress: [],
+        biasData: [],
+        regionalData: [],
+        sampleCoverageProgress: []
+      };
+      setDashboardData(basicDashboardData);
       return;
     }
 
-    // Fetch real map data first
+    // Try to fetch real map data first (may fail if functions are down)
     const mapDataPoints = await fetchMapDataForDataset(dataset.id);
 
     let results = dataset.analysisResults;

@@ -1,6 +1,16 @@
 import * as admin from 'firebase-admin';
-import { Readable } from 'stream';
-import * as csv from 'csv-parser';
+import * as Papa from 'papaparse';
+
+// Define the data point interface
+interface DataPoint {
+  id: string;
+  lat: number;
+  lng: number;
+  value: number;
+  bias: number;
+  category: string;
+  originalData: any;
+}
 
 export class DataProcessor {
   /**
@@ -25,18 +35,19 @@ export class DataProcessor {
   private async parseCSVData(buffer: Buffer): Promise<any[]> {
     return new Promise((resolve, reject) => {
       try {
-        const results: any[] = [];
-        Readable.from(buffer)
-          .pipe(csv())
-          .on('data', (data) => results.push(data))
-          .on('end', () => {
-            console.log(`Parsed ${results.length} records from CSV`);
-            resolve(results);
-          })
-          .on('error', (error) => {
+        const csvString = buffer.toString('utf8');
+        Papa.parse(csvString, {
+          header: true,
+          skipEmptyLines: true,
+          complete: (results: any) => {
+            console.log(`Parsed ${results.data.length} records from CSV`);
+            resolve(results.data);
+          },
+          error: (error: any) => {
             console.error('CSV parsing error:', error);
             reject(error);
-          });
+          }
+        });
       } catch (error) {
         console.error('CSV parser initialization error:', error);
         reject(error);
@@ -110,7 +121,7 @@ export class DataProcessor {
             }
             return null;
           })
-          .filter(p => p !== null);
+          .filter((p: DataPoint | null): p is DataPoint => p !== null);
 
       } else if (dataset.fileType === 'geojson' || dataset.fileType === 'json') {
         const geoData = this.parseGeoJSONData(buffer);
@@ -143,7 +154,7 @@ export class DataProcessor {
               }
               return null;
             })
-            .filter(p => p !== null);
+            .filter((p: DataPoint | null): p is DataPoint => p !== null);
         }
       }
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -52,7 +53,8 @@ interface LayerState {
 
 const MapView: React.FC = () => {
   const { user } = useAuth();
-  const { toast } = useToast();  const [mapData, setMapData] = useState<MapData[]>([]);
+  const { toast } = useToast();
+  const [searchParams] = useSearchParams();  const [mapData, setMapData] = useState<MapData[]>([]);
   const [selectedDataset, setSelectedDataset] = useState<MapData | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMapData, setLoadingMapData] = useState(false);  const [layers, setLayers] = useState<LayerState>({
@@ -259,7 +261,20 @@ const MapView: React.FC = () => {
         datasets.push(dataset);
       });      console.log('MapView onSnapshot - Final datasets array:', datasets);
       setMapData(datasets);
-      if (datasets.length > 0 && !selectedDataset) {
+      
+      // Check if there's a dataset parameter in the URL
+      const datasetId = searchParams.get('dataset');
+      if (datasetId && datasets.length > 0) {
+        console.log('MapView onSnapshot - Looking for dataset with ID:', datasetId);
+        const targetDataset = datasets.find(ds => ds.id === datasetId);
+        if (targetDataset) {
+          console.log('MapView onSnapshot - Found target dataset:', targetDataset);
+          setSelectedDataset(targetDataset);
+        } else {
+          console.warn('MapView onSnapshot - Dataset not found, using first dataset');
+          setSelectedDataset(datasets[0]);
+        }
+      } else if (datasets.length > 0 && !selectedDataset) {
         console.log('MapView onSnapshot - Setting first dataset as selected:', datasets[0]);
         setSelectedDataset(datasets[0]);
       }
@@ -273,7 +288,7 @@ const MapView: React.FC = () => {
       });
       setLoading(false);
     });    return () => unsubscribe();
-  }, [user, toast]);
+  }, [user, toast, searchParams]);
 
   // Fetch map data when dataset is selected
   useEffect(() => {

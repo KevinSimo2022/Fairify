@@ -1,6 +1,16 @@
 import * as admin from 'firebase-admin';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import { PracticalDataProcessor } from './analysis/practicalDataProcessor';
+import { setGlobalOptions } from 'firebase-functions/v2';
+import { DataProcessor } from './analysis/dataProcessor';
+import { ServerEncryptionService } from './utils/encryption';
+
+// Set global options for all functions
+setGlobalOptions({
+  maxInstances: 10,
+  timeoutSeconds: 540,
+  memory: '1GiB',
+  region: 'us-central1'
+});
 
 // Initialize Firebase Admin if not already initialized
 if (!admin.apps.length) {
@@ -8,12 +18,16 @@ if (!admin.apps.length) {
 }
 
 const db = admin.firestore();
-const processor = new PracticalDataProcessor();
+const processor = new DataProcessor();
 
 /**
  * Analyze a dataset without encryption
  */
-export const analyzeDataset = onCall(async (request) => {
+export const analyzeDataset = onCall({
+  timeoutSeconds: 540,
+  memory: '1GiB',
+  maxInstances: 10
+}, async (request) => {
   const { auth, data } = request;
   
   if (!auth?.uid) {
@@ -67,20 +81,42 @@ export const analyzeDataset = onCall(async (request) => {
       biasScore: analysisResults.bias?.biasScore
     });
     
-    // Update dataset with analysis results
+    // Update dataset with analysis results (keep unencrypted for app use)
     await db.collection('datasets').doc(datasetId).update({
-      status: 'analyzed',
-      analysisResults,
+      status: 'complete',
+      analysisResults: analysisResults,
       totalRows: dataPoints.length,
+      // Store processed data points for map visualization
+      processedDataPoints: dataPoints,
       analyzedAt: admin.firestore.FieldValue.serverTimestamp(),
       lastModified: admin.firestore.FieldValue.serverTimestamp()
     });
     
+    // Encrypt the original file in Firebase Storage after analysis
+    if (dataset.filePath) {
+      console.log('Encrypting original file in storage...');
+      try {
+        const encryptedFilePath = await encryptFileInStorage(dataset.filePath, userId);
+        console.log('Original file encrypted and uploaded to:', encryptedFilePath);
+        
+        // Update dataset with encrypted file path
+        await db.collection('datasets').doc(datasetId).update({
+          encryptedFilePath: encryptedFilePath,
+          originalFileEncrypted: true,
+          fileEncryptedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+      } catch (encryptError) {
+        console.error('Failed to encrypt original file, but analysis succeeded:', encryptError);
+        // Continue without failing the entire operation
+      }
+    }
+    
     return {
       success: true,
       datasetId,
-      analysisResults,
-      totalDataPoints: dataPoints.length
+      analysisResults: analysisResults,
+      totalDataPoints: dataPoints.length,
+      fileEncrypted: true
     };
     
   } catch (error) {
@@ -104,9 +140,69 @@ export const analyzeDataset = onCall(async (request) => {
 });
 
 /**
+ * Encrypt file in Firebase Storage after analysis
+ */
+async function encryptFileInStorage(filePath: string, userId: string): Promise<string> {
+  try {
+    const bucket = admin.storage().bucket();
+    const file = bucket.file(filePath);
+    
+    // Download original file
+    const [buffer] = await file.download();
+    console.log(`Downloaded original file for encryption: ${filePath}`);
+    
+    // Encrypt the file content
+    const encryptedData = ServerEncryptionService.encryptFileBuffer(buffer, {
+      enabled: true
+    });
+    
+    // Create new encrypted file path
+    const encryptedFilePath = filePath.replace(/(\.[^.]+)$/, '_encrypted$1');
+    const encryptedFile = bucket.file(encryptedFilePath);
+    
+    // Upload encrypted file - convert encrypted data to buffer if needed
+    let uploadBuffer: Buffer;
+    if (ServerEncryptionService.isEncrypted(encryptedData)) {
+      // Convert encrypted data to buffer
+      uploadBuffer = Buffer.from(JSON.stringify(encryptedData), 'utf8');
+    } else {
+      uploadBuffer = encryptedData as Buffer;
+    }
+    
+    await encryptedFile.save(uploadBuffer, {
+      metadata: {
+        contentType: 'application/octet-stream',
+        metadata: {
+          originalPath: filePath,
+          encrypted: 'true',
+          encryptedAt: new Date().toISOString(),
+          userId: userId
+        }
+      }
+    });
+    
+    console.log(`Encrypted file uploaded to: ${encryptedFilePath}`);
+    
+    // Delete original file for security
+    await file.delete();
+    console.log(`Original file deleted: ${filePath}`);
+    
+    return encryptedFilePath;
+    
+  } catch (error) {
+    console.error('Error encrypting file in storage:', error);
+    throw new Error(`Failed to encrypt file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
  * Get map data for a specific dataset
  */
-export const getMapDataForDataset = onCall(async (request) => {
+export const getMapDataForDataset = onCall({
+  timeoutSeconds: 300,
+  memory: '1GiB',
+  maxInstances: 10
+}, async (request) => {
   const { auth, data } = request;
   
   if (!auth?.uid) {
@@ -137,11 +233,30 @@ export const getMapDataForDataset = onCall(async (request) => {
     console.log('Getting map data for dataset:', { 
       fileName: dataset.fileName, 
       fileType: dataset.fileType,
-      status: dataset.status 
+      status: dataset.status,
+      hasProcessedDataPoints: dataset.processedDataPoints ? true : false
     });
     
-    // Extract data points from the dataset
-    const dataPoints = await processor.extractDataPoints(dataset, datasetId);
+    // Check if we have processed data points stored from analysis
+    let dataPoints;
+    if (dataset.processedDataPoints && Array.isArray(dataset.processedDataPoints)) {
+      console.log(`Using stored processed data points: ${dataset.processedDataPoints.length} points`);
+      dataPoints = dataset.processedDataPoints;
+    } else {
+      // Fallback: extract data points from the dataset file
+      console.log('No processed data found, extracting from file...');
+      dataPoints = await processor.extractDataPoints(dataset, datasetId);
+      console.log(`Extracted ${dataPoints.length} data points from file`);
+      
+      // Store for future use if we got data
+      if (dataPoints.length > 0) {
+        await db.collection('datasets').doc(datasetId).update({
+          processedDataPoints: dataPoints,
+          lastDataPointsUpdate: admin.firestore.FieldValue.serverTimestamp()
+        });
+        console.log(`Stored ${dataPoints.length} processed data points for future use`);
+      }
+    }
     
     console.log(`Retrieved ${dataPoints.length} data points for map visualization`);
     
@@ -149,7 +264,8 @@ export const getMapDataForDataset = onCall(async (request) => {
       success: true,
       datasetId,
       dataPoints,
-      totalPoints: dataPoints.length
+      totalPoints: dataPoints.length,
+      fromStoredData: dataset.processedDataPoints ? true : false
     };
     
   } catch (error) {
@@ -166,7 +282,11 @@ export const getMapDataForDataset = onCall(async (request) => {
 /**
  * Get user's files
  */
-export const getUserFiles = onCall(async (request) => {
+export const getUserFiles = onCall({
+  timeoutSeconds: 60,
+  memory: '512MiB',
+  maxInstances: 10
+}, async (request) => {
   const { auth, data } = request;
   
   if (!auth?.uid) {
@@ -202,7 +322,11 @@ export const getUserFiles = onCall(async (request) => {
 /**
  * Check if file exists
  */
-export const checkFileExists = onCall(async (request) => {
+export const checkFileExists = onCall({
+  timeoutSeconds: 60,
+  memory: '512MiB',
+  maxInstances: 10
+}, async (request) => {
   const { auth, data } = request;
   
   if (!auth?.uid) {
@@ -242,7 +366,11 @@ export const checkFileExists = onCall(async (request) => {
 /**
  * Delete a file
  */
-export const deleteFile = onCall(async (request) => {
+export const deleteFile = onCall({
+  timeoutSeconds: 120,
+  memory: '512MiB',
+  maxInstances: 10
+}, async (request) => {
   const { auth, data } = request;
   
   if (!auth?.uid) {

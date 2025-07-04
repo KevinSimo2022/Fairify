@@ -10,6 +10,7 @@ interface UploadedFile {
   uploadedAt: Date;
   downloadURL?: string;
   error?: string;
+  originalFileEncrypted?: boolean;
 }
 
 const STORAGE_KEY = 'maphera-uploaded-files';
