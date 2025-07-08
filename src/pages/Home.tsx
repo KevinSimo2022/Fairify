@@ -1,5 +1,4 @@
-
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,10 +13,56 @@ import {
   Users,
   Activity
 } from 'lucide-react';
+import { functions } from '@/lib/firebase';
+import { httpsCallable } from 'firebase/functions';
 
 const Home: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+
+  // State for stats and activity
+  const [stats, setStats] = useState([
+    { label: 'Datasets Analyzed', value: '...', icon: Globe },
+    { label: 'Bias Detections', value: '...', icon: TrendingUp },
+    { label: 'Active Users', value: '...', icon: Users },
+    { label: 'Uptime', value: '...', icon: Activity }
+  ]);
+  const [activity, setActivity] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchStatsAndActivity() {
+      setLoading(true);
+      try {
+        // Fetch global stats
+        const getGlobalStatsFn = httpsCallable(functions, 'getGlobalStats');
+        const statsRes = await getGlobalStatsFn();
+        const statsData = statsRes.data as any;
+        if (statsData?.stats) {
+          setStats([
+            { label: 'Datasets Analyzed', value: statsData.stats.datasetsAnalyzed, icon: Globe },
+            { label: 'Bias Detections', value: statsData.stats.biasDetections, icon: TrendingUp },
+            { label: 'Active Users', value: statsData.stats.activeUsers, icon: Users },
+            { label: 'Uptime', value: statsData.stats.uptime, icon: Activity }
+          ]);
+        }
+        // Fetch recent activity (only if logged in)
+        if (user) {
+          const getRecentActivityFn = httpsCallable(functions, 'getRecentActivity');
+          const activityRes = await getRecentActivityFn();
+          const activityData = activityRes.data as any;
+          if (activityData?.activity) {
+            setActivity(activityData.activity);
+          }
+        }
+      } catch (err) {
+        // Optionally handle error
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchStatsAndActivity();
+  }, [user]);
 
   const features = [
     {
@@ -44,13 +89,6 @@ const Home: React.FC = () => {
       description: 'Role-based access control with 2FA and audit logging',
       color: 'text-red-500'
     }
-  ];
-
-  const stats = [
-    { label: 'Datasets Analyzed', value: '12,487', icon: Globe },
-    { label: 'Bias Detections', value: '3,241', icon: TrendingUp },
-    { label: 'Active Users', value: '892', icon: Users },
-    { label: 'Uptime', value: '99.9%', icon: Activity }
   ];
 
   if (!user) {
@@ -147,28 +185,30 @@ const Home: React.FC = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {[
-                { name: 'Climate_Data_2024.csv', status: 'Complete', bias: 'Low', date: '2 hours ago' },
-                { name: 'Environmental_Survey.geojson', status: 'Processing', bias: '-', date: '1 day ago' },
-                { name: 'Weather_Stations.csv', status: 'Complete', bias: 'Medium', date: '3 days ago' }
-              ].map((item, index) => (
-                <div key={index} className="flex items-center justify-between py-2 border-b last:border-b-0">
-                  <div>
-                    <p className="font-medium font-open-sans">{item.name}</p>
-                    <p className="text-sm text-gray-500">{item.date}</p>
+              {loading ? (
+                <div>Loading...</div>
+              ) : activity.length === 0 ? (
+                <div className="text-gray-500">No recent activity found.</div>
+              ) : (
+                activity.map((item, index) => (
+                  <div key={index} className="flex items-center justify-between py-2 border-b last:border-b-0">
+                    <div>
+                      <p className="font-medium font-open-sans">{item.name}</p>
+                      <p className="text-sm text-gray-500">{item.date ? new Date(item.date).toLocaleString() : ''}</p>
+                    </div>
+                    <div className="text-right">
+                      <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
+                        item.status === 'complete' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {item.status}
+                      </span>
+                      {item.bias !== '-' && (
+                        <p className="text-sm mt-1">Bias: {item.bias}</p>
+                      )}
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
-                      item.status === 'Complete' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                    }`}>
-                      {item.status}
-                    </span>
-                    {item.bias !== '-' && (
-                      <p className="text-sm mt-1">Bias: {item.bias}</p>
-                    )}
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </CardContent>
         </Card>

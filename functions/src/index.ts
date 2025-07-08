@@ -425,3 +425,92 @@ export const deleteFile = onCall({
     throw new HttpsError('internal', 'Failed to delete file: ' + (error instanceof Error ? error.message : 'Unknown error'));
   }
 });
+
+/**
+ * Get global stats for dashboard
+ */
+export const getGlobalStats = onCall({
+  timeoutSeconds: 30,
+  memory: '512MiB',
+  maxInstances: 5
+}, async (_request) => {
+  try {
+    // Count total datasets
+    const datasetsSnap = await db.collection('datasets').get();
+    const totalDatasets = datasetsSnap.size;
+
+    // Count bias detections (datasets with analysisResults.bias)
+    let biasDetections = 0;
+    let activeUsersSet = new Set<string>();
+    datasetsSnap.forEach(doc => {
+      const data = doc.data();
+      if (data.analysisResults && data.analysisResults.bias) biasDetections++;
+      if (data.userId) activeUsersSet.add(data.userId);
+    });
+
+    // Uptime is static for now (could be dynamic if tracked)
+    const uptime = '99.9%';
+
+    return {
+      success: true,
+      stats: {
+        datasetsAnalyzed: totalDatasets,
+        biasDetections,
+        activeUsers: activeUsersSet.size,
+        uptime
+      }
+    };
+  } catch (error) {
+    console.error('Error in getGlobalStats:', error);
+    throw new HttpsError('internal', 'Failed to get global stats: ' + (error instanceof Error ? error.message : 'Unknown error'));
+  }
+});
+
+/**
+ * Get recent activity for the logged-in user
+ */
+export const getRecentActivity = onCall({
+  timeoutSeconds: 30,
+  memory: '512MiB',
+  maxInstances: 5
+}, async (request) => {
+  const { auth } = request;
+  if (!auth?.uid) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+  const userId = auth.uid;
+  let snapshot;
+  try {
+    // Try to order by analyzedAt
+    try {
+      const query = db.collection('datasets')
+        .where('userId', '==', userId)
+        .orderBy('analyzedAt', 'desc')
+        .limit(5);
+      snapshot = await query.get();
+    } catch (e) {
+      // Fallback to uploadedAt if analyzedAt is missing or not indexed
+      const fallbackQuery = db.collection('datasets')
+        .where('userId', '==', userId)
+        .orderBy('uploadedAt', 'desc')
+        .limit(5);
+      snapshot = await fallbackQuery.get();
+    }
+    const activity = snapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        name: data.fileName || 'Unknown',
+        status: data.status || 'Unknown',
+        bias: data.analysisResults?.bias?.biasLevel || '-',
+        date: data.analyzedAt ? data.analyzedAt.toDate().toISOString() : (data.uploadedAt ? data.uploadedAt.toDate().toISOString() : null)
+      };
+    });
+    return {
+      success: true,
+      activity
+    };
+  } catch (error) {
+    console.error('Error in getRecentActivity:', error);
+    throw new HttpsError('internal', 'Failed to get recent activity: ' + (error instanceof Error ? error.message : 'Unknown error'));
+  }
+});

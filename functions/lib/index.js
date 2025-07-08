@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteFile = exports.checkFileExists = exports.getUserFiles = exports.getMapDataForDataset = exports.analyzeDataset = void 0;
+exports.getRecentActivity = exports.getGlobalStats = exports.deleteFile = exports.checkFileExists = exports.getUserFiles = exports.getMapDataForDataset = exports.analyzeDataset = void 0;
 const admin = require("firebase-admin");
 const https_1 = require("firebase-functions/v2/https");
 const v2_1 = require("firebase-functions/v2");
@@ -352,6 +352,96 @@ exports.deleteFile = (0, https_1.onCall)({
             throw error;
         }
         throw new https_1.HttpsError('internal', 'Failed to delete file: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    }
+});
+/**
+ * Get global stats for dashboard
+ */
+exports.getGlobalStats = (0, https_1.onCall)({
+    timeoutSeconds: 30,
+    memory: '512MiB',
+    maxInstances: 5
+}, async (_request) => {
+    try {
+        // Count total datasets
+        const datasetsSnap = await db.collection('datasets').get();
+        const totalDatasets = datasetsSnap.size;
+        // Count bias detections (datasets with analysisResults.bias)
+        let biasDetections = 0;
+        let activeUsersSet = new Set();
+        datasetsSnap.forEach(doc => {
+            const data = doc.data();
+            if (data.analysisResults && data.analysisResults.bias)
+                biasDetections++;
+            if (data.userId)
+                activeUsersSet.add(data.userId);
+        });
+        // Uptime is static for now (could be dynamic if tracked)
+        const uptime = '99.9%';
+        return {
+            success: true,
+            stats: {
+                datasetsAnalyzed: totalDatasets,
+                biasDetections,
+                activeUsers: activeUsersSet.size,
+                uptime
+            }
+        };
+    }
+    catch (error) {
+        console.error('Error in getGlobalStats:', error);
+        throw new https_1.HttpsError('internal', 'Failed to get global stats: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    }
+});
+/**
+ * Get recent activity for the logged-in user
+ */
+exports.getRecentActivity = (0, https_1.onCall)({
+    timeoutSeconds: 30,
+    memory: '512MiB',
+    maxInstances: 5
+}, async (request) => {
+    const { auth } = request;
+    if (!(auth === null || auth === void 0 ? void 0 : auth.uid)) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = auth.uid;
+    let snapshot;
+    try {
+        // Try to order by analyzedAt
+        try {
+            const query = db.collection('datasets')
+                .where('userId', '==', userId)
+                .orderBy('analyzedAt', 'desc')
+                .limit(5);
+            snapshot = await query.get();
+        }
+        catch (e) {
+            // Fallback to uploadedAt if analyzedAt is missing or not indexed
+            const fallbackQuery = db.collection('datasets')
+                .where('userId', '==', userId)
+                .orderBy('uploadedAt', 'desc')
+                .limit(5);
+            snapshot = await fallbackQuery.get();
+        }
+        const activity = snapshot.docs.map(doc => {
+            var _a, _b;
+            const data = doc.data();
+            return {
+                name: data.fileName || 'Unknown',
+                status: data.status || 'Unknown',
+                bias: ((_b = (_a = data.analysisResults) === null || _a === void 0 ? void 0 : _a.bias) === null || _b === void 0 ? void 0 : _b.biasLevel) || '-',
+                date: data.analyzedAt ? data.analyzedAt.toDate().toISOString() : (data.uploadedAt ? data.uploadedAt.toDate().toISOString() : null)
+            };
+        });
+        return {
+            success: true,
+            activity
+        };
+    }
+    catch (error) {
+        console.error('Error in getRecentActivity:', error);
+        throw new https_1.HttpsError('internal', 'Failed to get recent activity: ' + (error instanceof Error ? error.message : 'Unknown error'));
     }
 });
 //# sourceMappingURL=index.js.map
