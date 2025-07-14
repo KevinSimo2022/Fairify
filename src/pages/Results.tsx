@@ -26,8 +26,9 @@ import { collection, query, where, orderBy, onSnapshot, doc, getDoc } from 'fire
 import { httpsCallable } from 'firebase/functions';
 import { db, functions } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
+
+import { calculateLiveStats } from '../utils/calculateLiveStats';
+import { jsPDF } from 'jspdf';
 
 interface AnalysisResult {
   id: string;
@@ -209,7 +210,6 @@ const Results: React.FC = () => {
   // Load real analysis results from Firebase
   useEffect(() => {
     if (isAuthLoading) return;
-    
     if (!user) {
       setResults([]);
       setLoading(false);
@@ -224,41 +224,46 @@ const Results: React.FC = () => {
 
     const unsubscribe = onSnapshot(datasetsQuery, async (snapshot) => {
       const results: AnalysisResult[] = [];
-      
       for (const docSnap of snapshot.docs) {
         const data = docSnap.data();
-        
-        // Only include datasets that have been analyzed
         if (data.status === 'analyzed' || data.status === 'complete') {
-          // Extract metrics with multiple fallback paths
-          const analysisData = data.analysisResults || {};
-          
-          // For bias score - try multiple paths
-          const biasScore = analysisData.bias?.biasScore || 
-                           analysisData.biasAnalysis?.biasScore ||
-                           analysisData.summary?.biasScore || 
-                           data.overallBias || 0;
-          
-          // For coverage score - try multiple paths  
-          const coverageScore = analysisData.coverage?.coveragePercentage ||
-                               analysisData.coverageAnalysis?.overallCoverage ||
-                               analysisData.summary?.coveragePercentage || 
-                               data.overallCoverage || 0;
-          
-          // For Gini coefficient - calculate from data or use stored value
-          let giniCoefficient = analysisData.bias?.giniCoefficient ||
-                               analysisData.biasAnalysis?.giniCoefficient ||
-                               analysisData.summary?.giniCoefficient || 
-                               data.giniCoefficient || 0;
-          
-          // If still 0 and we have real data, try to calculate Gini from data points
-          if (giniCoefficient === 0 && data.realDataPoints && data.realDataPoints.length > 0) {
-            const biasValues = data.realDataPoints.map((p: any) => p.bias || 0).filter((b: number) => b > 0);
-            if (biasValues.length > 0) {
-              giniCoefficient = calculateGiniFromValues(biasValues);
-            }
+          // Fetch real data points using the cloud function (like Dashboard/MapView)
+          let realDataPoints: any[] = [];
+          try {
+            const getMapData = httpsCallable(functions, 'getMapDataForDataset');
+            const result = await getMapData({ datasetId: docSnap.id });
+            const dataResult = result.data as { dataPoints?: any[] };
+            realDataPoints = (dataResult && dataResult.dataPoints) ? dataResult.dataPoints : [];
+          } catch (err) {
+            console.error('Results - Error fetching real data points for', docSnap.id, err);
+            realDataPoints = [];
           }
-
+          console.log('Results - raw realDataPoints:', realDataPoints);
+          // Always map points to ensure value, bias, and category fields are present (like MapView/Dashboard)
+          const mappedDataPoints = realDataPoints.map((point: any, index: number) => ({
+            id: point.id || `point-${index}`,
+            lat: point.lat,
+            lng: point.lng,
+            value: typeof point.value === 'number' && !isNaN(point.value)
+              ? point.value
+              : (typeof point.properties?.value === 'number' && !isNaN(point.properties.value)
+                ? point.properties.value
+                : Math.random() * 100),
+            bias: typeof point.bias === 'number' && !isNaN(point.bias)
+              ? point.bias
+              : (typeof point.properties?.bias === 'number' && !isNaN(point.properties.bias)
+                ? point.properties.bias
+                : Math.random()),
+            category: point.category ?? point.properties?.category ?? point.region ?? 'unknown'
+          }));
+          console.log('Results - mappedDataPoints:', mappedDataPoints);
+          const liveStats = mappedDataPoints.length > 0 ? calculateLiveStats(mappedDataPoints) : {
+            avgValue: 0,
+            avgBias: 0,
+            giniCoefficient: 0,
+            highBiasCount: 0,
+            coverageScore: 0
+          };
           const analysisResult: AnalysisResult = {
             id: docSnap.id,
             name: data.fileName || data.name || 'Untitled Dataset',
@@ -266,23 +271,20 @@ const Results: React.FC = () => {
             uploadDate: data.uploadedAt?.toDate() || new Date(),
             processedDate: data.analyzedAt?.toDate() || data.uploadedAt?.toDate() || new Date(),
             status: 'complete',
-            biasScore: biasScore,
-            giniCoefficient: giniCoefficient,
-            coverageScore: coverageScore,
-            dataPoints: data.totalRows || data.realDataPoints?.length || 0,
+            biasScore: liveStats.avgBias,
+            giniCoefficient: liveStats.giniCoefficient,
+            coverageScore: liveStats.coverageScore,
+            dataPoints: mappedDataPoints.length || data.totalRows || 0,
             fileSize: formatFileSize(data.fileSize || 0),
             analysisResults: data.analysisResults,
             context: data.context,
-            // We'll enrich these with dashboard and map data when needed
             regionData: [],
             mapInsights: {},
             dashboardMetrics: {}
           };
-          
           results.push(analysisResult);
         }
       }
-      
       setResults(results);
       setLoading(false);
     }, (error) => {

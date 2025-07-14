@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+// Import calculateLiveStats from MapView
+import { calculateLiveStats } from '../utils/calculateLiveStats';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -162,6 +164,26 @@ const Dashboard: React.FC = () => {
     // Fetch real map data first
     const mapDataPoints = await fetchMapDataForDataset(dataset.id);
 
+    // Use the same quick stats calculation as MapView
+    const liveStats: {
+      avgValue: number;
+      avgBias: number;
+      giniCoefficient: number;
+      highBiasCount: number;
+      coverageScore: number;
+    } = calculateLiveStats ? calculateLiveStats(mapDataPoints) : {
+      avgValue: 0,
+      avgBias: 0,
+      giniCoefficient: 0,
+      highBiasCount: 0,
+      coverageScore: 0
+    };
+    const dataPointsCount = mapDataPoints.length;
+    const avgBiasScore = liveStats.avgBias;
+    const highBiasCount = liveStats.highBiasCount;
+    const highBiasPercent = dataPointsCount > 0 ? (highBiasCount / dataPointsCount) * 100 : 0;
+    const giniCoefficient = liveStats.giniCoefficient;
+
     let results = dataset.analysisResults;
     if (typeof results === 'string') {
       try {
@@ -259,7 +281,7 @@ const Dashboard: React.FC = () => {
       
       mapDataPoints.forEach((point, index) => {
         // Try multiple possible region field names
-        let originalRegion = point.region || 
+        const originalRegion = point.region || 
                     point.properties?.region || 
                     point.properties?.admin1 ||
                     point.properties?.state ||
@@ -710,46 +732,28 @@ const Dashboard: React.FC = () => {
           color: 'text-blue-600'
         },
         {
-          title: 'Analysis Status',
-          value: dataset.status || 'Processed',
-          description: 'Current status',
-          color: (dataset.status?.toLowerCase() === 'complete' || !dataset.status) ? 'text-green-600' : 'text-orange-600'
+          title: 'Data Points',
+          value: dataPointsCount,
+          description: 'Total data points in dataset',
+          color: 'text-blue-600'
         },
         {
-          title: 'Bias Score',
-          value: biasScore.toFixed(2),
-          description: `${biasScore <= 0.3 ? 'Good' : biasScore <= 0.6 ? 'Moderate' : 'High'} bias level`,
-          color: biasScore <= 0.3 ? 'text-green-600' : biasScore <= 0.6 ? 'text-orange-600' : 'text-red-600'
+          title: 'Avg Bias Score',
+          value: avgBiasScore.toFixed(2),
+          description: avgBiasScore <= 0.3 ? 'Good' : avgBiasScore <= 0.6 ? 'Moderate' : 'High',
+          color: avgBiasScore <= 0.3 ? 'text-green-600' : avgBiasScore <= 0.6 ? 'text-orange-600' : 'text-red-600'
         },
         {
-          title: 'Regional Coverage',
-          value: `${regionsWithData.length}/${allRegions.length}`,
-          description: regionsWithData.length === 0 
-            ? 'No regional data available'
-            : regionsWithData.length === allRegions.length
-            ? 'Complete regional coverage' 
-            : `${allRegions.length - regionsWithData.length} regions missing data`,
-          color: regionsWithData.length >= allRegions.length * 0.7 ? 'text-green-600' : 'text-orange-600'
+          title: 'Gini Coefficient',
+          value: giniCoefficient.toFixed(2),
+          description: 'Inequality of bias distribution',
+          color: giniCoefficient <= 0.3 ? 'text-green-600' : giniCoefficient <= 0.6 ? 'text-orange-600' : 'text-red-600'
         },
         {
-          title: 'Population Coverage',
-          value: `${populationCoverageRatio.toFixed(1)}%`,
-          description: populationCoverageRatio >= 70 
-            ? 'Good population representation' 
-            : populationCoverageRatio >= 50 
-            ? 'Moderate population coverage'
-            : 'Population gaps need attention',
-          color: populationCoverageRatio >= 70 ? 'text-green-600' : populationCoverageRatio >= 50 ? 'text-orange-600' : 'text-red-600'
-        },
-        {
-          title: 'Overall Coverage',
-          value: `${overallCoverage.toFixed(1)}%`,
-          description: overallCoverage >= 70 
-            ? 'Excellent geographic coverage' 
-            : overallCoverage >= 50 
-            ? 'Adequate geographic spread'
-            : 'Geographic coverage needs improvement',
-          color: overallCoverage >= 70 ? 'text-green-600' : overallCoverage >= 50 ? 'text-orange-600' : 'text-red-600'
+          title: 'High Bias Points',
+          value: `${highBiasCount} (${highBiasPercent.toFixed(1)}%)`,
+          description: 'Points with bias > 0.6',
+          color: highBiasPercent > 30 ? 'text-red-600' : highBiasPercent > 15 ? 'text-orange-600' : 'text-green-600'
         }
       ],
       biasData: processedRegionalData,
@@ -806,13 +810,13 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     if (isAuthLoading) {
       setIsLoading(true);
-      return; // Wait for auth to resolve
+      return undefined; // Wait for auth to resolve
     }
     if (!user) {
       setIsLoading(false);
       setDatasetsList([]);
       setDashboardData(null);
-      return;
+      return undefined;
     }
 
     setIsLoading(true);
@@ -898,7 +902,7 @@ const Dashboard: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in" data-tour="dashboard-page">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-roboto font-bold text-gray-900 mb-2">Analytics Dashboard</h1>
