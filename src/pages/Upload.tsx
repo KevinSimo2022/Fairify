@@ -32,6 +32,7 @@ interface UploadedFile {
   uploadedAt: Date;
   downloadURL?: string;
   error?: string;
+  originalFileEncrypted?: boolean;
 }
 
 const Upload: React.FC = () => {
@@ -110,7 +111,8 @@ const Upload: React.FC = () => {
         progress: file.status === 'analyzed' ? 100 : 0,
         uploadedAt: new Date(file.uploadedAt?.seconds * 1000 || Date.now()),
         downloadURL: file.downloadURL,
-        error: file.error
+        error: file.error,
+        originalFileEncrypted: file.originalFileEncrypted || false
       }));
       
       // Update local state with server data
@@ -583,7 +585,16 @@ const Upload: React.FC = () => {
                         )}
                         
                         {file.status === 'complete' && (
-                          <p className="text-xs text-green-600 mt-1">Analysis complete</p>
+                          <div className="flex items-center space-x-2 mt-1">
+                            <p className="text-xs text-green-600">Analysis complete</p>
+                            {file.originalFileEncrypted && (
+                              <Badge variant="secondary" className="text-xs bg-green-100 text-green-800 flex items-center ml-2">
+                                {/* ShieldCheck icon (inline SVG for now) */}
+                                <svg className="h-3 w-3 mr-1 text-green-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 17v.01M7 10v2a5 5 0 0010 0v-2a5 5 0 00-10 0zm5-6a5 5 0 00-5 5v2a5 5 0 0010 0v-2a5 5 0 00-5-5z" /></svg>
+                                Encrypted
+                              </Badge>
+                            )}
+                          </div>
                         )}
 
                         {file.status === 'error' && file.error && (

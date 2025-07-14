@@ -75,14 +75,37 @@ export const analyzeDataset = onCall(async (request) => {
       analyzedAt: admin.firestore.FieldValue.serverTimestamp(),
       lastModified: admin.firestore.FieldValue.serverTimestamp()
     });
-    
+
+    // Encrypt the dataset file after analysis is complete
+    try {
+      // You should store and manage encryption keys securely in production
+      const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || '0123456789abcdef0123456789abcdef'; // 32 bytes for AES-256
+      const { encryptFileInStorage } = await import('./utils/encryption');
+      const bucketName = admin.storage().bucket().name;
+      const encryptedFilePath = await encryptFileInStorage(bucketName, dataset.filePath, Buffer.from(ENCRYPTION_KEY, 'utf8'));
+      // Optionally, update the dataset document to reference the encrypted file
+      await db.collection('datasets').doc(datasetId).update({
+        encryptedFilePath,
+        encryptedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      console.log('Dataset file encrypted and stored at:', encryptedFilePath);
+    } catch (encryptionError) {
+      console.error('Failed to encrypt dataset file:', encryptionError);
+      // Optionally, update dataset with encryption error
+      await db.collection('datasets').doc(datasetId).update({
+        encryptionError: encryptionError instanceof Error ? encryptionError.message : String(encryptionError),
+        encryptionStatus: 'error',
+        lastModified: admin.firestore.FieldValue.serverTimestamp()
+      });
+    }
+
     return {
       success: true,
       datasetId,
       analysisResults,
       totalDataPoints: dataPoints.length
     };
-    
+
   } catch (error) {
     console.error('Error in analyzeDataset:', error);
     
